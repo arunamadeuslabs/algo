@@ -1,0 +1,28 @@
+# Credentials
+.env
+*.env
+
+# Virtual environment
+.venv/
+venv/
+
+# Runtime files
+.algo_pids.json
+launcher.log
+__pycache__/
+*.pyc
+
+# Paper trading state (local)
+backtest/paper_trades/
+sapphire/paper_trades/
+
+# Results (regeneratable)
+backtest/results/
+sapphire/results/
+
+# OS files
+Thumbs.db
+.DS_Store
+
+# Windows scheduler (not needed on cloud)
+setup_scheduler.ps1

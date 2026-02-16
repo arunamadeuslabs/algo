@@ -30,6 +30,13 @@ import logging
 from datetime import datetime, timedelta
 from pathlib import Path
 
+# Load .env file for credentials (cloud deployment)
+try:
+    from dotenv import load_dotenv
+    load_dotenv(Path(os.path.dirname(os.path.abspath(__file__))) / ".env")
+except ImportError:
+    pass  # python-dotenv not installed, env vars must be set manually
+
 # ── Paths ────────────────────────────────────────────────────
 BASE_DIR = Path(os.path.dirname(os.path.abspath(__file__)))
 BACKTEST_DIR = BASE_DIR / "backtest"
@@ -86,13 +93,16 @@ def start_algo(algo_key: str) -> subprocess.Popen:
     log.info(f"    CMD: {' '.join(cmd)}")
     log.info(f"    CWD: {algo['cwd']}")
 
-    proc = subprocess.Popen(
-        cmd,
+    # Cross-platform: CREATE_NO_WINDOW only exists on Windows
+    kwargs = dict(
         cwd=algo["cwd"],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
-        creationflags=subprocess.CREATE_NO_WINDOW,
     )
+    if sys.platform == "win32":
+        kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
+
+    proc = subprocess.Popen(cmd, **kwargs)
 
     log.info(f"    PID: {proc.pid} — Started")
     return proc
@@ -116,19 +126,27 @@ def load_pids() -> dict:
 
 
 def is_process_alive(pid: int) -> bool:
-    """Check if a process is still running."""
-    try:
-        import ctypes
-        kernel32 = ctypes.windll.kernel32
-        handle = kernel32.OpenProcess(0x0400, False, pid)  # PROCESS_QUERY_INFORMATION
-        if handle:
-            exit_code = ctypes.c_ulong()
-            kernel32.GetExitCodeProcess(handle, ctypes.byref(exit_code))
-            kernel32.CloseHandle(handle)
-            return exit_code.value == 259  # STILL_ACTIVE
-        return False
-    except Exception:
-        return False
+    """Check if a process is still running (cross-platform)."""
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            kernel32 = ctypes.windll.kernel32
+            handle = kernel32.OpenProcess(0x0400, False, pid)  # PROCESS_QUERY_INFORMATION
+            if handle:
+                exit_code = ctypes.c_ulong()
+                kernel32.GetExitCodeProcess(handle, ctypes.byref(exit_code))
+                kernel32.CloseHandle(handle)
+                return exit_code.value == 259  # STILL_ACTIVE
+            return False
+        except Exception:
+            return False
+    else:
+        # Linux/Mac
+        try:
+            os.kill(pid, 0)  # Signal 0 = just check if alive
+            return True
+        except (ProcessLookupError, PermissionError):
+            return False
 
 
 def kill_process(pid: int):

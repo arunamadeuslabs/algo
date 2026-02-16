@@ -23,8 +23,11 @@ import time
 
 # --- Dhan API Configuration ---
 DHAN_API_BASE = "https://api.dhan.co/v2"
-DHAN_ACCESS_TOKEN = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzUxMiJ9.eyJpc3MiOiJkaGFuIiwicGFydG5lcklkIjoiIiwiZXhwIjoxNzcxMzA3MjUyLCJpYXQiOjE3NzEyMjA4NTIsInRva2VuQ29uc3VtZXJUeXBlIjoiU0VMRiIsIndlYmhvb2tVcmwiOiIiLCJkaGFuQ2xpZW50SWQiOiIxMTEwMjY5MDk5In0.3H5RmzOQW3rVP-tn6Nswcc04LI_GZ4eabzzVHiDdFZWBnJpdRJjwimEmahl-NRSSDoZK2n8tkUiGDdnrsXCHEQ"
-DHAN_CLIENT_ID = "1110269099"
+
+# Load credentials from environment variables (for cloud deployment)
+# Falls back to hardcoded values for local development
+DHAN_ACCESS_TOKEN = os.environ.get("DHAN_JWT_TOKEN", "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzUxMiJ9.eyJpc3MiOiJkaGFuIiwicGFydG5lcklkIjoiIiwiZXhwIjoxNzcxMzA3MjUyLCJpYXQiOjE3NzEyMjA4NTIsInRva2VuQ29uc3VtZXJUeXBlIjoiU0VMRiIsIndlYmhvb2tVcmwiOiIiLCJkaGFuQ2xpZW50SWQiOiIxMTEwMjY5MDk5In0.3H5RmzOQW3rVP-tn6Nswcc04LI_GZ4eabzzVHiDdFZWBnJpdRJjwimEmahl-NRSSDoZK2n8tkUiGDdnrsXCHEQ")
+DHAN_CLIENT_ID = os.environ.get("DHAN_CLIENT_ID", "1110269099")
 
 # --- Nifty Security IDs ---
 # Nifty 50 Index on NSE
