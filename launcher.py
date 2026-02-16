@@ -1,20 +1,21 @@
 """
 Algo Auto-Launcher
 ===================
-Starts both trading algos (EMA Crossover + Sapphire Strangle) automatically.
+Starts all trading algos (EMA Crossover + Sapphire Strangle + Momentum) automatically.
 Designed to be scheduled via Windows Task Scheduler at 09:10 AM Mon-Fri.
 
 Features:
-  - Launches both algos as background processes
+  - Launches all algos as background processes
   - Monitors health and restarts if crashed
   - Auto-kills after market close (15:35)
   - Logs everything to launcher.log
   - Sends desktop notification on trade events
 
 Usage:
-  python launcher.py                  # Start both algos
+  python launcher.py                  # Start all algos
   python launcher.py --sapphire       # Sapphire only
   python launcher.py --ema            # EMA crossover only
+  python launcher.py --momentum       # Momentum only
   python launcher.py --status         # Check if algos are running
   python launcher.py --stop           # Stop all algos
 """
@@ -41,6 +42,7 @@ except ImportError:
 BASE_DIR = Path(os.path.dirname(os.path.abspath(__file__)))
 BACKTEST_DIR = BASE_DIR / "backtest"
 SAPPHIRE_DIR = BASE_DIR / "sapphire"
+MOMENTUM_DIR = BASE_DIR / "momentum"
 PYTHON = sys.executable
 
 PID_FILE = BASE_DIR / ".algo_pids.json"
@@ -61,6 +63,13 @@ ALGOS = {
         "args": ["--live"],
         "cwd": str(SAPPHIRE_DIR),
         "log": str(SAPPHIRE_DIR / "paper_trades" / "sapphire_paper.log"),
+    },
+    "momentum": {
+        "name": "Momentum Dual Confirmation",
+        "script": str(MOMENTUM_DIR / "paper_trading.py"),
+        "args": ["--live"],
+        "cwd": str(MOMENTUM_DIR),
+        "log": str(MOMENTUM_DIR / "paper_trades" / "momentum_paper.log"),
     },
 }
 
@@ -346,6 +355,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Algo Auto-Launcher")
     parser.add_argument("--ema", action="store_true", help="Run EMA crossover only")
     parser.add_argument("--sapphire", action="store_true", help="Run Sapphire only")
+    parser.add_argument("--momentum", action="store_true", help="Run Momentum only")
     parser.add_argument("--status", action="store_true", help="Check running algos")
     parser.add_argument("--stop", action="store_true", help="Stop all algos")
 
@@ -362,7 +372,9 @@ if __name__ == "__main__":
             keys.append("ema")
         if args.sapphire:
             keys.append("sapphire")
+        if args.momentum:
+            keys.append("momentum")
         if not keys:
-            keys = ["ema", "sapphire"]  # Default: both
+            keys = ["ema", "sapphire", "momentum"]  # Default: all three
 
         run(keys)
