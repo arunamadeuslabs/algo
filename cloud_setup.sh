@@ -57,8 +57,10 @@ fi
 # Create paper_trades directories
 mkdir -p backtest/paper_trades
 mkdir -p sapphire/paper_trades
+mkdir -p momentum/paper_trades
 mkdir -p backtest/results
 mkdir -p sapphire/results
+mkdir -p momentum/results
 
 echo ""
 echo "============================================"
