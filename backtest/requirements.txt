@@ -1,0 +1,6 @@
+# Nifty Option Selling Backtest
+# EMA Crossover "Plus Sign" Strategy
+
+pandas>=2.0
+numpy>=1.24
+matplotlib>=3.7
