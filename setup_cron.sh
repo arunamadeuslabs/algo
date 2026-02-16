@@ -26,25 +26,49 @@ if [ ! -f "$ALGO_DIR/.env" ]; then
     echo "WARNING: .env file not found. Create it with your Dhan credentials."
 fi
 
-# Build cron command that loads .env before running
-# Mon-Fri at 09:10 IST (timezone set in cloud_setup.sh)
-CRON_CMD="10 9 * * 1-5 cd $ALGO_DIR && export \$(grep -v '^\#' $ALGO_DIR/.env | xargs) && $PYTHON $LAUNCHER >> $LOGFILE 2>&1"
+REPORT_SCRIPT="$ALGO_DIR/daily_report.py"
+REPORT_LOG="$ALGO_DIR/daily_report.log"
 
-# Add to crontab (replacing any existing algo entry)
-(crontab -l 2>/dev/null | grep -v "launcher.py" ; echo "$CRON_CMD") | crontab -
+# Build cron commands that load .env before running
+# 1. Mon-Fri at 09:10 IST — Start algos
+CRON_LAUNCHER="10 9 * * 1-5 cd $ALGO_DIR && export \$(grep -v '^\#' $ALGO_DIR/.env | xargs) && $PYTHON $LAUNCHER >> $LOGFILE 2>&1"
+
+# 2. Mon-Fri at 15:40 IST — Send daily report email + update dashboard
+CRON_REPORT="40 15 * * 1-5 cd $ALGO_DIR && export \$(grep -v '^\#' $ALGO_DIR/.env | xargs) && $PYTHON $REPORT_SCRIPT >> $REPORT_LOG 2>&1"
+
+# 3. On reboot — Start dashboard web server
+CRON_REBOOT="@reboot cd $ALGO_DIR && python3 -m http.server 8080 > /dev/null 2>&1 &"
+
+# Add to crontab (replacing any existing algo entries)
+(crontab -l 2>/dev/null | grep -v "launcher.py" | grep -v "daily_report.py" | grep -v "http.server" ; echo "$CRON_LAUNCHER" ; echo "$CRON_REPORT" ; echo "$CRON_REBOOT") | crontab -
+
+# Start the web server now (if not already running)
+if ! pgrep -f "http.server 8080" > /dev/null; then
+    cd $ALGO_DIR && nohup python3 -m http.server 8080 > /dev/null 2>&1 &
+    echo "  Dashboard web server started on port 8080"
+else
+    echo "  Dashboard web server already running on port 8080"
+fi
 
 echo ""
 echo "============================================"
-echo "  Cron job installed!"
+echo "  Cron jobs installed!"
 echo "============================================"
 echo ""
-echo "  Schedule:  Mon-Fri at 09:10 AM IST"
-echo "  Command:   $PYTHON $LAUNCHER"
-echo "  Log:       $LOGFILE"
+echo "  1. Algo Launcher:  Mon-Fri at 09:10 AM IST"
+echo "     Command: $PYTHON $LAUNCHER"
+echo "     Log:     $LOGFILE"
+echo ""
+echo "  2. Daily Report:   Mon-Fri at 03:40 PM IST"
+echo "     Command: $PYTHON $REPORT_SCRIPT"
+echo "     Log:     $REPORT_LOG"
+echo ""
+echo "  3. Dashboard:      Auto-start on reboot"
+echo "     URL: http://$(curl -s ifconfig.me):8080/dashboard.html"
 echo ""
 echo "  Current crontab:"
-crontab -l | grep launcher
+crontab -l | grep -E "launcher|daily_report|http.server"
 echo ""
-echo "  To remove: crontab -e  (delete the launcher line)"
+echo "  To remove: crontab -e  (delete the lines)"
 echo "  To verify: crontab -l"
 echo ""

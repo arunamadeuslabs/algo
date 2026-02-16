@@ -269,6 +269,22 @@ def run(algo_keys: list):
 
     desktop_notify("Algos Stopped", "All algos shut down for the day")
 
+    # Generate daily report & send email
+    log.info("  Generating daily report...")
+    try:
+        report_script = str(BASE_DIR / "daily_report.py")
+        result = subprocess.run(
+            [PYTHON, report_script],
+            cwd=str(BASE_DIR),
+            capture_output=True, text=True, timeout=60,
+        )
+        if result.returncode == 0:
+            log.info("  Daily report sent successfully.")
+        else:
+            log.warning(f"  Daily report failed: {result.stderr[:200]}")
+    except Exception as e:
+        log.warning(f"  Could not generate daily report: {e}")
+
     log.info("\n  All algos stopped. Session complete.")
     log.info("=" * 60)
 
