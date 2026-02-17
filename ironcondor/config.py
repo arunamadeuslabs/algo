@@ -13,7 +13,7 @@ NUM_LOTS = 2                     # 2 lots per side
 # --- Entry Settings ---
 ENTRY_TIME = "10:05"             # Enter after 10 AM (let market settle)
 ENTRY_LATEST_TIME = "12:00"      # Don't enter after noon
-SKIP_EXPIRY_DAY = True           # Skip entry on Thursday (expiry day)
+SKIP_EXPIRY_DAY = False          # Trade on Thursdays too (max daily frequency)
 
 # --- Strike Selection ---
 OTM_OFFSET_CE = 300              # Sell CE at spot + 300 (OTM)
@@ -37,13 +37,13 @@ DAILY_PROFIT_TARGET = 5000       # ₹5,000 daily target
 
 # --- Range-Bound Filters ---
 # Only enter when market is range-bound
-VIX_MAX = 25.0                   # Don't enter if India VIX > 25
-RSI_LOWER = 30                   # RSI must be between 30-70 for range-bound
-RSI_UPPER = 70
+VIX_MAX = 28.0                   # Don't enter if India VIX > 28 (relaxed)
+RSI_LOWER = 20                   # RSI range-bound zone widened (was 30)
+RSI_UPPER = 80                   # (was 70)
 RSI_PERIOD = 14
 BB_PERIOD = 20                   # Bollinger Band period
 BB_STD = 2.0                     # Bollinger Band standard deviations
-BB_WIDTH_MAX = 0.08              # Max BB width (% of price) — range filter
+BB_WIDTH_MAX = 0.15              # BB filter nearly disabled (was 0.08)
 
 # --- Transaction Costs (Indian Market) ---
 INCLUDE_COSTS = True

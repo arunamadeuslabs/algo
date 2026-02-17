@@ -130,6 +130,30 @@ def filter_month(df: pd.DataFrame, date_col: str) -> pd.DataFrame:
     return df[(dates >= month_str) & (dates <= today_str)]
 
 
+def filter_6months(df: pd.DataFrame, date_col: str) -> pd.DataFrame:
+    """Filter trades from the last 6 months."""
+    today = date.today()
+    six_months_ago = today - timedelta(days=182)
+    start_str = str(six_months_ago)
+    today_str = str(today)
+    if df.empty or date_col not in df.columns:
+        return pd.DataFrame()
+    dates = df[date_col].astype(str).str[:10]
+    return df[(dates >= start_str) & (dates <= today_str)]
+
+
+def filter_1year(df: pd.DataFrame, date_col: str) -> pd.DataFrame:
+    """Filter trades from the last 1 year."""
+    today = date.today()
+    one_year_ago = today - timedelta(days=365)
+    start_str = str(one_year_ago)
+    today_str = str(today)
+    if df.empty or date_col not in df.columns:
+        return pd.DataFrame()
+    dates = df[date_col].astype(str).str[:10]
+    return df[(dates >= start_str) & (dates <= today_str)]
+
+
 def calc_stats(df: pd.DataFrame, pnl_col: str = "net_pnl") -> dict:
     if df.empty or pnl_col not in df.columns:
         return {"trades": 0, "wins": 0, "losses": 0, "win_rate": 0,
@@ -162,10 +186,14 @@ def generate_report() -> dict:
     ema_today = filter_today(ema_all, "entry_time") if not ema_all.empty else pd.DataFrame()
     ema_week = filter_week(ema_all, "entry_time") if not ema_all.empty else pd.DataFrame()
     ema_month = filter_month(ema_all, "entry_time") if not ema_all.empty else pd.DataFrame()
+    ema_6m = filter_6months(ema_all, "entry_time") if not ema_all.empty else pd.DataFrame()
+    ema_1y = filter_1year(ema_all, "entry_time") if not ema_all.empty else pd.DataFrame()
     report["ema"] = {
         "today": calc_stats(ema_today),
         "week": calc_stats(ema_week),
         "month": calc_stats(ema_month),
+        "six_month": calc_stats(ema_6m),
+        "one_year": calc_stats(ema_1y),
         "all_time": calc_stats(ema_all),
         "capital": ema_state.get("capital", 500000),
         "initial_capital": ema_state.get("initial_capital", 500000),
@@ -179,10 +207,14 @@ def generate_report() -> dict:
     sap_today = filter_today(sap_all, "date") if not sap_all.empty else pd.DataFrame()
     sap_week = filter_week(sap_all, "date") if not sap_all.empty else pd.DataFrame()
     sap_month = filter_month(sap_all, "date") if not sap_all.empty else pd.DataFrame()
+    sap_6m = filter_6months(sap_all, "date") if not sap_all.empty else pd.DataFrame()
+    sap_1y = filter_1year(sap_all, "date") if not sap_all.empty else pd.DataFrame()
     report["sapphire"] = {
         "today": calc_stats(sap_today),
         "week": calc_stats(sap_week),
         "month": calc_stats(sap_month),
+        "six_month": calc_stats(sap_6m),
+        "one_year": calc_stats(sap_1y),
         "all_time": calc_stats(sap_all),
         "capital": sap_state.get("capital", 150000),
         "initial_capital": sap_state.get("initial_capital", 150000),
@@ -196,10 +228,14 @@ def generate_report() -> dict:
     mom_today = filter_today(mom_all, "date") if not mom_all.empty else pd.DataFrame()
     mom_week = filter_week(mom_all, "date") if not mom_all.empty else pd.DataFrame()
     mom_month = filter_month(mom_all, "date") if not mom_all.empty else pd.DataFrame()
+    mom_6m = filter_6months(mom_all, "date") if not mom_all.empty else pd.DataFrame()
+    mom_1y = filter_1year(mom_all, "date") if not mom_all.empty else pd.DataFrame()
     report["momentum"] = {
         "today": calc_stats(mom_today),
         "week": calc_stats(mom_week),
         "month": calc_stats(mom_month),
+        "six_month": calc_stats(mom_6m),
+        "one_year": calc_stats(mom_1y),
         "all_time": calc_stats(mom_all),
         "capital": mom_state.get("capital", 400000),
         "initial_capital": mom_state.get("initial_capital", 400000),
@@ -213,10 +249,14 @@ def generate_report() -> dict:
     ic_today = filter_today(ic_all, "date") if not ic_all.empty else pd.DataFrame()
     ic_week = filter_week(ic_all, "date") if not ic_all.empty else pd.DataFrame()
     ic_month = filter_month(ic_all, "date") if not ic_all.empty else pd.DataFrame()
+    ic_6m = filter_6months(ic_all, "date") if not ic_all.empty else pd.DataFrame()
+    ic_1y = filter_1year(ic_all, "date") if not ic_all.empty else pd.DataFrame()
     report["ironcondor"] = {
         "today": calc_stats(ic_today),
         "week": calc_stats(ic_week),
         "month": calc_stats(ic_month),
+        "six_month": calc_stats(ic_6m),
+        "one_year": calc_stats(ic_1y),
         "all_time": calc_stats(ic_all),
         "capital": ic_state.get("capital", 400000),
         "initial_capital": ic_state.get("initial_capital", 400000),
@@ -246,6 +286,10 @@ def generate_report() -> dict:
         "week_trades": report["ema"]["week"]["trades"] + report["sapphire"]["week"]["trades"] + report["momentum"]["week"]["trades"] + report["ironcondor"]["week"]["trades"],
         "month_pnl": round(report["ema"]["month"]["total_pnl"] + report["sapphire"]["month"]["total_pnl"] + report["momentum"]["month"]["total_pnl"] + report["ironcondor"]["month"]["total_pnl"], 2),
         "month_trades": report["ema"]["month"]["trades"] + report["sapphire"]["month"]["trades"] + report["momentum"]["month"]["trades"] + report["ironcondor"]["month"]["trades"],
+        "six_month_pnl": round(report["ema"]["six_month"]["total_pnl"] + report["sapphire"]["six_month"]["total_pnl"] + report["momentum"]["six_month"]["total_pnl"] + report["ironcondor"]["six_month"]["total_pnl"], 2),
+        "six_month_trades": report["ema"]["six_month"]["trades"] + report["sapphire"]["six_month"]["trades"] + report["momentum"]["six_month"]["trades"] + report["ironcondor"]["six_month"]["trades"],
+        "one_year_pnl": round(report["ema"]["one_year"]["total_pnl"] + report["sapphire"]["one_year"]["total_pnl"] + report["momentum"]["one_year"]["total_pnl"] + report["ironcondor"]["one_year"]["total_pnl"], 2),
+        "one_year_trades": report["ema"]["one_year"]["trades"] + report["sapphire"]["one_year"]["trades"] + report["momentum"]["one_year"]["trades"] + report["ironcondor"]["one_year"]["trades"],
     }
     return report
 
@@ -298,6 +342,8 @@ def generate_dashboard(report: dict) -> str:
     daily_sections = build_strat_sections("today", "Today")
     weekly_sections = build_strat_sections("week", "Week")
     monthly_sections = build_strat_sections("month", "Month")
+    six_month_sections = build_strat_sections("six_month", "6M")
+    one_year_sections = build_strat_sections("one_year", "1Y")
 
     # Daily P&L chart data
     daily_chart_data = []
@@ -383,6 +429,8 @@ tr:hover{{background:#1c2128}}
 <button class="ptab active" onclick="showPeriod('daily',this)">Daily</button>
 <button class="ptab" onclick="showPeriod('weekly',this)">Weekly</button>
 <button class="ptab" onclick="showPeriod('monthly',this)">Monthly</button>
+<button class="ptab" onclick="showPeriod('sixmonth',this)">6 Months</button>
+<button class="ptab" onclick="showPeriod('oneyear',this)">1 Year</button>
 </div>
 
 <!-- DAILY VIEW -->
@@ -424,6 +472,34 @@ tr:hover{{background:#1c2128}}
 </div>
 <div class="cards">
 {monthly_sections}
+</div>
+</div>
+
+<!-- 6-MONTH VIEW -->
+<div id="view-sixmonth" class="period-view">
+<div class="cards" style="margin-bottom:16px">
+<div class="card">
+<h3>Last 6 Months P&amp;L</h3>
+<div class="value" style="color:{pnl_color(comb["six_month_pnl"])}">{pnl_icon(comb["six_month_pnl"])} {format_inr(comb["six_month_pnl"])}</div>
+<div class="sub">{comb["six_month_trades"]} trades in 6 months</div>
+</div>
+</div>
+<div class="cards">
+{six_month_sections}
+</div>
+</div>
+
+<!-- 1-YEAR VIEW -->
+<div id="view-oneyear" class="period-view">
+<div class="cards" style="margin-bottom:16px">
+<div class="card">
+<h3>Last 1 Year P&amp;L</h3>
+<div class="value" style="color:{pnl_color(comb["one_year_pnl"])}">{pnl_icon(comb["one_year_pnl"])} {format_inr(comb["one_year_pnl"])}</div>
+<div class="sub">{comb["one_year_trades"]} trades in 1 year</div>
+</div>
+</div>
+<div class="cards">
+{one_year_sections}
 </div>
 </div>
 

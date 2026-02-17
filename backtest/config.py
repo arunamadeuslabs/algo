@@ -29,7 +29,7 @@ DAYS_TO_EXPIRY_MAX = 7         # Max DTE for selling
 
 # --- Filters ---
 VOLUME_MULTIPLIER = 0.0        # 0 = disabled, 1.2 = signal candle volume must be 1.2x avg
-SIDEWAYS_ADX_THRESHOLD = 15    # ADX below this = sideways (no trade)
+SIDEWAYS_ADX_THRESHOLD = 10    # ADX below this = sideways (relaxed from 15)
 RSI_OVERBOUGHT = 70
 RSI_OVERSOLD = 30
 

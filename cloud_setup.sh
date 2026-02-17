@@ -58,9 +58,11 @@ fi
 mkdir -p backtest/paper_trades
 mkdir -p sapphire/paper_trades
 mkdir -p momentum/paper_trades
+mkdir -p ironcondor/paper_trades
 mkdir -p backtest/results
 mkdir -p sapphire/results
 mkdir -p momentum/results
+mkdir -p ironcondor/results
 
 echo ""
 echo "============================================"

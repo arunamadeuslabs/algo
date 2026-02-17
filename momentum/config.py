@@ -43,15 +43,15 @@ MIN_CANDLE_BODY_PCT = 0.4        # Min body-to-range ratio for strong candle
 
 # --- Entry Rules ---
 TRADING_START = "09:20"          # IST - skip first 5 min
-TRADING_END = "14:30"            # IST - no new trades after this (need room for trail)
+TRADING_END = "14:30"            # IST - no entries in last hour
 SQUARE_OFF_TIME = "15:20"        # IST - forced square off
-ENTRY_COOLDOWN_BARS = 3          # Min bars between trades (avoid overtrading)
+ENTRY_COOLDOWN_BARS = 3          # Min bars between trades
 MAX_TRADES_PER_DAY = 4           # Max intraday trades
 
 # --- Risk Management: Partial Exit System ---
 # Phase 1: Book 50% at 1:1 R:R
 PARTIAL_EXIT_PCT = 0.50          # Exit 50% of position at first target
-PARTIAL_TARGET_RR = 1.0          # First target = 1× risk (1:1 R:R)
+PARTIAL_TARGET_RR = 1.5          # First target = 1.5× risk (1.5:1 R:R)
 
 # Phase 2: Trail remaining 50%
 TRAIL_REMAINING = True           # Trail the remaining position
@@ -82,7 +82,7 @@ STRUCTURE_BREAK_BUFFER = 5       # Buffer points for structure break confirmatio
 # --- Transaction Costs (Indian Market - Futures) ---
 INCLUDE_COSTS = True
 BROKERAGE_PER_ORDER = 20         # Flat brokerage per order
-SLIPPAGE_POINTS = 1.5            # Slippage per trade in Nifty points
+SLIPPAGE_POINTS = 0.5            # Slippage per trade in Nifty points (liquid futures)
 STT_RATE = 0.0001                # STT on sell side (futures)
 EXCHANGE_CHARGES = 0.000019      # NSE transaction charges (futures)
 GST_RATE = 0.18                  # GST on brokerage + exchange
