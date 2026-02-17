@@ -301,6 +301,7 @@ tr:hover{{background:#1c2128}}
 <div class="header">
 <h1>Nifty Algo Trading Dashboard</h1>
 <div class="subtitle">Paper Trading | {report["date"]} | Updated {report["generated_at"]}</div>
+<div style="margin-top:8px;font-size:13px"><a href="tradebook.html" style="color:#58a6ff;text-decoration:none">📒 Trade Book →</a></div>
 </div>
 <div class="cards">
 <div class="card">
@@ -504,6 +505,17 @@ def main():
     with open(DASHBOARD_FILE, "w", encoding="utf-8") as f:
         f.write(html)
     print(f"\n  Dashboard saved: {DASHBOARD_FILE}")
+
+    # Generate Trade Book
+    try:
+        from tradebook import generate_tradebook
+        tradebook_file = BASE_DIR / "tradebook.html"
+        tb_html = generate_tradebook()
+        with open(tradebook_file, "w", encoding="utf-8") as f:
+            f.write(tb_html)
+        print(f"  Trade Book saved: {tradebook_file}")
+    except Exception as e:
+        print(f"  Trade Book generation failed: {e}")
 
     if args.dashboard_only:
         print("  Done (dashboard only).")

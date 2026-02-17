@@ -19,7 +19,12 @@ import numpy as np
 from datetime import datetime, timedelta
 import json
 import os
+import sys
 import time
+
+# Fix emoji encoding on GCP/Windows where stdout uses charmap codec
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 
 # --- Dhan API Configuration ---
 DHAN_API_BASE = "https://api.dhan.co/v2"
