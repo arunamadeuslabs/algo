@@ -5,11 +5,11 @@ Generates a comprehensive HTML trade book page showing ALL trades
 across all strategies (EMA, Sapphire, Momentum, Supertrend).
 
 Features:
-  - Strategy tabs with color coding
-  - Sortable columns (click headers)
-  - Date range filter
-  - P&L stats per strategy
-  - Running cumulative P&L
+  - Daily / Weekly / Monthly aggregation views
+  - 1M / 3M / 6M / All-Time period quick-select
+  - Strategy filter dropdown
+  - Expandable grouped views with individual trade details
+  - Export CSV
   - Responsive dark-themed UI matching dashboard.html
 
 Usage:
@@ -65,7 +65,6 @@ def load_state(path: Path) -> dict:
 
 
 def normalize_ema_trades(df: pd.DataFrame) -> pd.DataFrame:
-    """Normalize EMA trade log to common format."""
     if df.empty:
         return pd.DataFrame()
     rows = []
@@ -92,7 +91,6 @@ def normalize_ema_trades(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def normalize_sapphire_trades(df: pd.DataFrame) -> pd.DataFrame:
-    """Normalize Sapphire trade log to common format."""
     if df.empty:
         return pd.DataFrame()
     rows = []
@@ -117,7 +115,6 @@ def normalize_sapphire_trades(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def normalize_momentum_trades(df: pd.DataFrame) -> pd.DataFrame:
-    """Normalize Momentum trade log to common format."""
     if df.empty:
         return pd.DataFrame()
     rows = []
@@ -142,7 +139,6 @@ def normalize_momentum_trades(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def normalize_supertrend_trades(df: pd.DataFrame) -> pd.DataFrame:
-    """Normalize Supertrend trade log to common format."""
     if df.empty:
         return pd.DataFrame()
     rows = []
@@ -167,7 +163,6 @@ def normalize_supertrend_trades(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def calc_strategy_stats(df: pd.DataFrame) -> dict:
-    """Compute stats for a strategy's trades."""
     if df.empty:
         return {"trades": 0, "wins": 0, "losses": 0, "win_rate": 0,
                 "gross_pnl": 0, "costs": 0, "net_pnl": 0,
@@ -180,7 +175,6 @@ def calc_strategy_stats(df: pd.DataFrame) -> dict:
     total_wins = wins.sum() if len(wins) > 0 else 0
     total_losses = abs(losses.sum()) if len(losses) > 0 else 0
 
-    # Streaks
     max_w = max_l = cur_w = cur_l = 0
     for p in pnl:
         if p > 0:
@@ -209,7 +203,7 @@ def calc_strategy_stats(df: pd.DataFrame) -> dict:
 
 
 def generate_tradebook() -> str:
-    """Generate the complete trade book HTML."""
+    """Generate the complete trade book HTML with D/W/M views and period tabs."""
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     # Load and normalize all trades
@@ -231,7 +225,6 @@ def generate_tradebook() -> str:
     }
     combined = calc_strategy_stats(all_trades)
 
-    # Strategy colors
     colors = {
         "EMA Crossover": "#22c55e",
         "Sapphire Strangle": "#3b82f6",
@@ -239,7 +232,7 @@ def generate_tradebook() -> str:
         "Supertrend VWAP": "#14b8a6",
     }
 
-    # Build trade table rows as JSON for JavaScript sorting/filtering
+    # Build trades JSON
     trades_json = "[]"
     if not all_trades.empty:
         records = []
@@ -259,12 +252,9 @@ def generate_tradebook() -> str:
                 "net_pnl": float(r.get("net_pnl", 0)),
                 "status": str(r.get("status", "")),
             })
-        import json as _json
-        trades_json = _json.dumps(records)
+        trades_json = json.dumps(records)
 
-    # Stats JSON
-    import json as _json
-    stats_json = _json.dumps(stats)
+    colors_json = json.dumps(colors)
 
     def pnl_color(val):
         if val > 0: return "#00c853"
@@ -272,16 +262,24 @@ def generate_tradebook() -> str:
         return "#8b949e"
 
     def fmt(val):
-        return f"₹{val:+,.2f}" if val != 0 else "₹0.00"
+        return f"\u20b9{val:+,.2f}" if val != 0 else "\u20b90.00"
 
-    # Unique dates for date picker
-    date_min = ""
-    date_max = ""
-    if not all_trades.empty:
-        dates = all_trades["date"].dropna().unique()
-        if len(dates) > 0:
-            date_min = sorted(dates)[0]
-            date_max = sorted(dates)[-1]
+    # Strategy stats panels
+    strat_panels = ""
+    for name, s in stats.items():
+        c = colors[name]
+        strat_panels += f'''  <div class="strat-panel" style="border-top-color:{c}">
+    <h3 style="color:{c}">{name}</h3>
+    <div class="sg">
+      <div class="si"><div class="sl">Trades</div><div class="sv">{s["trades"]}</div></div>
+      <div class="si"><div class="sl">Win Rate</div><div class="sv">{s["win_rate"]}%</div></div>
+      <div class="si"><div class="sl">Net P&amp;L</div><div class="sv" style="color:{pnl_color(s["net_pnl"])}">{fmt(s["net_pnl"])}</div></div>
+      <div class="si"><div class="sl">Avg Win</div><div class="sv" style="color:#00c853">{fmt(s["avg_win"])}</div></div>
+      <div class="si"><div class="sl">Avg Loss</div><div class="sv" style="color:#ff1744">{fmt(s["avg_loss"])}</div></div>
+      <div class="si"><div class="sl">PF</div><div class="sv">{s["profit_factor"]}</div></div>
+    </div>
+  </div>
+'''
 
     html = f'''<!DOCTYPE html>
 <html lang="en">
@@ -294,36 +292,15 @@ def generate_tradebook() -> str:
 body{{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#0d1117;color:#e6edf3;padding:20px;max-width:1400px;margin:0 auto}}
 a{{color:#58a6ff;text-decoration:none}}
 a:hover{{text-decoration:underline}}
-
 .header{{text-align:center;padding:20px 0;border-bottom:1px solid #30363d;margin-bottom:24px}}
 .header h1{{color:#58a6ff;font-size:24px}}
 .header .subtitle{{color:#8b949e;font-size:14px;margin-top:4px}}
 .header .nav{{margin-top:8px;font-size:13px}}
-
-/* Summary Cards */
 .summary-cards{{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:24px}}
 .s-card{{background:#161b22;border:1px solid #30363d;border-radius:10px;padding:16px;text-align:center}}
 .s-card .s-label{{color:#8b949e;font-size:11px;text-transform:uppercase;letter-spacing:0.5px}}
 .s-card .s-val{{font-size:24px;font-weight:700;margin-top:4px}}
 .s-card .s-sub{{color:#8b949e;font-size:12px;margin-top:2px}}
-
-/* Strategy Tabs */
-.tabs{{display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap;align-items:center}}
-.tab{{padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;border:1px solid #30363d;background:#161b22;color:#8b949e;transition:all 0.2s}}
-.tab:hover{{border-color:#58a6ff;color:#e6edf3}}
-.tab.active{{background:#1f6feb22;border-color:#1f6feb;color:#58a6ff}}
-.tab .dot{{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px}}
-.tab .count{{background:#30363d;padding:2px 8px;border-radius:10px;margin-left:6px;font-size:11px}}
-
-/* Filters */
-.filters{{display:flex;gap:12px;margin-bottom:16px;align-items:center;flex-wrap:wrap}}
-.filters label{{color:#8b949e;font-size:12px}}
-.filters input,.filters select{{background:#0d1117;border:1px solid #30363d;color:#e6edf3;padding:6px 10px;border-radius:6px;font-size:13px}}
-.filters input:focus,.filters select:focus{{outline:none;border-color:#58a6ff}}
-.filter-btn{{padding:6px 14px;border-radius:6px;cursor:pointer;font-size:12px;border:1px solid #30363d;background:#161b22;color:#8b949e}}
-.filter-btn:hover{{border-color:#58a6ff;color:#e6edf3}}
-
-/* Strategy Stats Panel */
 .strat-stats{{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;margin-bottom:24px}}
 .strat-panel{{background:#161b22;border:1px solid #30363d;border-radius:10px;padding:16px;border-top:3px solid #30363d}}
 .strat-panel h3{{font-size:14px;margin-bottom:12px}}
@@ -331,21 +308,25 @@ a:hover{{text-decoration:underline}}
 .strat-panel .si{{text-align:center;padding:8px;background:#0d1117;border-radius:6px}}
 .strat-panel .si .sl{{color:#8b949e;font-size:10px;text-transform:uppercase}}
 .strat-panel .si .sv{{font-size:16px;font-weight:700;margin-top:2px}}
-
-/* Trade Table */
+.tabs-row{{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;align-items:center}}
+.tab-label{{color:#8b949e;font-size:12px;font-weight:600;margin-right:4px;text-transform:uppercase;letter-spacing:0.5px}}
+.tab{{padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;border:1px solid #30363d;background:#161b22;color:#8b949e;transition:all 0.2s}}
+.tab:hover{{border-color:#58a6ff;color:#e6edf3}}
+.tab.active{{background:#1f6feb22;border-color:#1f6feb;color:#58a6ff}}
+.filters{{display:flex;gap:12px;margin-bottom:16px;align-items:center;flex-wrap:wrap}}
+.filters label{{color:#8b949e;font-size:12px}}
+.filters select{{background:#0d1117;border:1px solid #30363d;color:#e6edf3;padding:6px 10px;border-radius:6px;font-size:13px}}
+.filters select:focus{{outline:none;border-color:#58a6ff}}
+.filter-btn{{padding:6px 14px;border-radius:6px;cursor:pointer;font-size:12px;border:1px solid #30363d;background:#161b22;color:#8b949e}}
+.filter-btn:hover{{border-color:#58a6ff;color:#e6edf3}}
 .table-wrap{{background:#161b22;border:1px solid #30363d;border-radius:10px;overflow:hidden;margin-bottom:20px}}
 .table-info{{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid #30363d}}
 .table-info .ti-left{{color:#8b949e;font-size:13px}}
 .table-info .ti-right{{color:#8b949e;font-size:12px}}
 table{{width:100%;border-collapse:collapse;font-size:12px}}
-th{{text-align:left;color:#8b949e;padding:10px 12px;border-bottom:1px solid #30363d;font-weight:600;cursor:pointer;user-select:none;white-space:nowrap}}
-th:hover{{color:#58a6ff}}
-th .sort-icon{{margin-left:4px;font-size:10px;opacity:0.5}}
-th.sorted .sort-icon{{opacity:1;color:#58a6ff}}
+th{{text-align:left;color:#8b949e;padding:10px 12px;border-bottom:1px solid #30363d;font-weight:600;white-space:nowrap}}
 td{{padding:8px 12px;border-bottom:1px solid #21262d;white-space:nowrap}}
 tr:hover{{background:#1c2128}}
-tr.win{{border-left:3px solid #00c853}}
-tr.loss{{border-left:3px solid #ff1744}}
 .pnl-pos{{color:#00c853;font-weight:700}}
 .pnl-neg{{color:#ff1744;font-weight:700}}
 .pnl-zero{{color:#8b949e}}
@@ -353,17 +334,15 @@ tr.loss{{border-left:3px solid #ff1744}}
 .dir-buy{{color:#00c853}}
 .dir-sell{{color:#ff1744}}
 .dir-strangle{{color:#a78bfa}}
-
+.group-row{{cursor:pointer;background:#161b22}}
+.group-row:hover{{background:#1c2128}}
+.group-row td{{padding:10px 12px;font-weight:600}}
+.expand-icon{{display:inline-block;width:16px;color:#58a6ff;font-size:10px;transition:transform 0.2s}}
+.detail-table{{width:100%;border-collapse:collapse;font-size:11px;background:#0d1117;margin:4px 0}}
+.detail-table th{{color:#8b949e;padding:6px 10px;font-size:10px;text-transform:uppercase;border-bottom:1px solid #21262d}}
+.detail-table td{{padding:6px 10px;border-bottom:1px solid #161b22}}
+.detail-table tr:hover{{background:#161b2288}}
 .footer{{text-align:center;color:#484f58;font-size:12px;padding:20px 0}}
-
-/* Pagination */
-.pagination{{display:flex;justify-content:center;align-items:center;gap:8px;padding:16px}}
-.page-btn{{padding:6px 12px;border-radius:6px;cursor:pointer;font-size:12px;border:1px solid #30363d;background:#161b22;color:#8b949e}}
-.page-btn:hover{{border-color:#58a6ff;color:#e6edf3}}
-.page-btn.active{{background:#1f6feb22;border-color:#1f6feb;color:#58a6ff}}
-.page-btn:disabled{{opacity:0.3;cursor:default}}
-.page-info{{color:#8b949e;font-size:12px}}
-
 @media(max-width:768px){{
   body{{padding:12px}}
   .summary-cards{{grid-template-columns:repeat(2,1fr)}}
@@ -376,12 +355,11 @@ tr.loss{{border-left:3px solid #ff1744}}
 <body>
 
 <div class="header">
-  <h1>📒 Trade Book</h1>
+  <h1>Trade Book</h1>
   <div class="subtitle">All Paper Trading Activity | Updated {now_str}</div>
-  <div class="nav"><a href="dashboard.html">← Dashboard</a></div>
+  <div class="nav"><a href="dashboard.html">&larr; Dashboard</a></div>
 </div>
 
-<!-- Combined Summary -->
 <div class="summary-cards">
   <div class="s-card">
     <div class="s-label">Total Trades</div>
@@ -410,255 +388,256 @@ tr.loss{{border-left:3px solid #ff1744}}
   </div>
 </div>
 
-<!-- Strategy Stats -->
 <div class="strat-stats">
-''' + ''.join([f'''  <div class="strat-panel" style="border-top-color:{colors[name]}">
-    <h3 style="color:{colors[name]}">{name}</h3>
-    <div class="sg">
-      <div class="si"><div class="sl">Trades</div><div class="sv">{s["trades"]}</div></div>
-      <div class="si"><div class="sl">Win Rate</div><div class="sv">{s["win_rate"]}%</div></div>
-      <div class="si"><div class="sl">Net P&amp;L</div><div class="sv" style="color:{pnl_color(s["net_pnl"])}">{fmt(s["net_pnl"])}</div></div>
-      <div class="si"><div class="sl">Avg Win</div><div class="sv" style="color:#00c853">{fmt(s["avg_win"])}</div></div>
-      <div class="si"><div class="sl">Avg Loss</div><div class="sv" style="color:#ff1744">{fmt(s["avg_loss"])}</div></div>
-      <div class="si"><div class="sl">Profit Factor</div><div class="sv">{s["profit_factor"]}</div></div>
-    </div>
-  </div>
-''' for name, s in stats.items()]) + f'''</div>
+{strat_panels}</div>
 
-<!-- Tabs & Filters -->
-<div class="tabs" id="stratTabs">
-  <div class="tab active" data-strategy="ALL" onclick="filterStrategy('ALL',this)">
-    <span class="dot" style="background:#58a6ff"></span>All<span class="count" id="count-ALL">{combined["trades"]}</span>
-  </div>
-  <div class="tab" data-strategy="EMA Crossover" onclick="filterStrategy('EMA Crossover',this)">
-    <span class="dot" style="background:#22c55e"></span>EMA<span class="count" id="count-EMA">{stats["EMA Crossover"]["trades"]}</span>
-  </div>
-  <div class="tab" data-strategy="Sapphire Strangle" onclick="filterStrategy('Sapphire Strangle',this)">
-    <span class="dot" style="background:#3b82f6"></span>Sapphire<span class="count" id="count-SAP">{stats["Sapphire Strangle"]["trades"]}</span>
-  </div>
-  <div class="tab" data-strategy="Momentum" onclick="filterStrategy('Momentum',this)">
-    <span class="dot" style="background:#f97316"></span>Momentum<span class="count" id="count-MOM">{stats["Momentum"]["trades"]}</span>
-  </div>
-  <div class="tab" data-strategy="Supertrend VWAP" onclick="filterStrategy('Supertrend VWAP',this)">
-    <span class="dot" style="background:#14b8a6"></span>Supertrend<span class="count" id="count-ST">{stats["Supertrend VWAP"]["trades"]}</span>
-  </div>
+<!-- Period Tabs -->
+<div class="tabs-row" id="periodTabs">
+  <span class="tab-label">Period:</span>
+  <div class="tab" data-period="1M" onclick="setPeriod('1M',this)">1 Month</div>
+  <div class="tab" data-period="3M" onclick="setPeriod('3M',this)">3 Months</div>
+  <div class="tab" data-period="6M" onclick="setPeriod('6M',this)">6 Months</div>
+  <div class="tab active" data-period="ALL" onclick="setPeriod('ALL',this)">All Time</div>
 </div>
+
+<!-- View Tabs -->
+<div class="tabs-row" id="viewTabs">
+  <span class="tab-label">View:</span>
+  <div class="tab active" data-view="daily" onclick="setView('daily',this)">Daily</div>
+  <div class="tab" data-view="weekly" onclick="setView('weekly',this)">Weekly</div>
+  <div class="tab" data-view="monthly" onclick="setView('monthly',this)">Monthly</div>
+</div>
+
+<!-- Filters -->
 <div class="filters">
-  <label>From</label> <input type="date" id="dateFrom" value="{date_min}" onchange="applyFilters()">
-  <label>To</label> <input type="date" id="dateTo" value="{date_max}" onchange="applyFilters()">
-  <label>P&amp;L</label>
-  <select id="pnlFilter" onchange="applyFilters()">
-    <option value="ALL">All</option>
-    <option value="WIN">Winners only</option>
-    <option value="LOSS">Losers only</option>
-  </select>
-  <label>Direction</label>
-  <select id="dirFilter" onchange="applyFilters()">
-    <option value="ALL">All</option>
-    <option value="BUY">Buy / Long</option>
-    <option value="SELL">Sell / Short</option>
-    <option value="STRANGLE">Strangle</option>
+  <label>Strategy</label>
+  <select id="stratFilter" onchange="applyFilters()">
+    <option value="ALL">All Strategies</option>
+    <option value="EMA Crossover">EMA Crossover</option>
+    <option value="Sapphire Strangle">Sapphire Strangle</option>
+    <option value="Momentum">Momentum</option>
+    <option value="Supertrend VWAP">Supertrend VWAP</option>
   </select>
   <button class="filter-btn" onclick="resetFilters()">Reset</button>
-  <button class="filter-btn" onclick="exportCSV()">📥 Export CSV</button>
+  <button class="filter-btn" onclick="exportCSV()">Export CSV</button>
 </div>
 
-<!-- Trade Table -->
+<!-- Grouped Table -->
 <div class="table-wrap">
   <div class="table-info">
-    <div class="ti-left" id="tableInfo">Showing 0 trades</div>
+    <div class="ti-left" id="tableInfo">Loading...</div>
     <div class="ti-right" id="filteredPnl"></div>
   </div>
   <div style="overflow-x:auto">
-    <table id="tradeTable">
+    <table id="groupTable">
       <thead>
         <tr>
-          <th onclick="sortTable('date')">#<span class="sort-icon">⇅</span></th>
-          <th onclick="sortTable('date')">Date<span class="sort-icon">⇅</span></th>
-          <th onclick="sortTable('strategy')">Strategy<span class="sort-icon">⇅</span></th>
-          <th onclick="sortTable('direction')">Dir<span class="sort-icon">⇅</span></th>
-          <th>Instrument</th>
-          <th onclick="sortTable('entry_price')">Entry<span class="sort-icon">⇅</span></th>
-          <th onclick="sortTable('exit_price')">Exit<span class="sort-icon">⇅</span></th>
-          <th>Qty</th>
-          <th onclick="sortTable('gross_pnl')">Gross<span class="sort-icon">⇅</span></th>
-          <th onclick="sortTable('costs')">Costs<span class="sort-icon">⇅</span></th>
-          <th onclick="sortTable('net_pnl')">Net P&amp;L<span class="sort-icon">⇅</span></th>
-          <th onclick="sortTable('net_pnl')">Cum P&amp;L<span class="sort-icon">⇅</span></th>
-          <th>Status</th>
+          <th>Period</th>
+          <th>Trades</th>
+          <th style="color:#00c853">Wins</th>
+          <th style="color:#ff1744">Losses</th>
+          <th>Win%</th>
+          <th>Gross P&amp;L</th>
+          <th>Costs</th>
+          <th>Net P&amp;L</th>
+          <th>Cum P&amp;L</th>
         </tr>
       </thead>
-      <tbody id="tradeBody"></tbody>
+      <tbody id="groupBody"></tbody>
     </table>
   </div>
-  <div class="pagination" id="pagination"></div>
 </div>
 
 <div class="footer">
-  Nifty Algo Trader — Trade Book — <a href="dashboard.html">Dashboard</a>
+  Nifty Algo Trader &mdash; Trade Book &mdash; <a href="dashboard.html">Dashboard</a>
 </div>
 
 <script>
 const ALL_TRADES = {trades_json};
-const STRAT_COLORS = {_json.dumps(colors)};
-const PAGE_SIZE = 50;
+const STRAT_COLORS = {colors_json};
 
-let filtered = [...ALL_TRADES];
-let currentPage = 1;
-let currentStrategy = 'ALL';
-let sortCol = 'date';
-let sortAsc = false;
+let periodFilter = 'ALL';
+let viewMode = 'daily';
+let strategyFilter = 'ALL';
+let filtered = [];
 
 function pnlClass(v) {{ return v > 0 ? 'pnl-pos' : v < 0 ? 'pnl-neg' : 'pnl-zero'; }}
-function fmt(v) {{ return v === 0 ? '₹0' : (v > 0 ? '₹+' : '₹') + v.toFixed(2).replace(/\\B(?=(\\d{{3}})+(?!\\d))/g, ','); }}
+function fmt(v) {{ return v === 0 ? '\u20b90' : (v > 0 ? '\u20b9+' : '\u20b9') + v.toFixed(2).replace(/\\B(?=(\\d{{3}})+(?!\\d))/g, ','); }}
 function dirClass(d) {{
-  d = d.toUpperCase();
+  d = (d||'').toUpperCase();
   if (d === 'BUY' || d === 'LONG') return 'dir-buy';
   if (d === 'SELL' || d === 'SHORT') return 'dir-sell';
   if (d === 'STRANGLE') return 'dir-strangle';
   return '';
 }}
 
-function filterStrategy(strat, el) {{
-  currentStrategy = strat;
-  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+function getGroupKey(dateStr) {{
+  if (viewMode === 'daily') return dateStr;
+  if (viewMode === 'weekly') {{
+    var d = new Date(dateStr + 'T00:00:00');
+    var day = d.getDay();
+    var diff = d.getDate() - day + (day === 0 ? -6 : 1);
+    var monday = new Date(d);
+    monday.setDate(diff);
+    var mm = String(monday.getMonth() + 1).padStart(2, '0');
+    var dd = String(monday.getDate()).padStart(2, '0');
+    return monday.getFullYear() + '-' + mm + '-' + dd;
+  }}
+  if (viewMode === 'monthly') return dateStr.substring(0, 7);
+  return dateStr;
+}}
+
+function getGroupLabel(key) {{
+  var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  if (viewMode === 'daily') {{
+    var d = new Date(key + 'T00:00:00');
+    var dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    return dayNames[d.getDay()] + ' ' + d.getDate() + ' ' + months[d.getMonth()] + ' ' + d.getFullYear();
+  }}
+  if (viewMode === 'weekly') {{
+    var d = new Date(key + 'T00:00:00');
+    var end = new Date(d);
+    end.setDate(end.getDate() + 4);
+    return d.getDate() + ' ' + months[d.getMonth()] + ' - ' + end.getDate() + ' ' + months[end.getMonth()] + ' ' + end.getFullYear();
+  }}
+  if (viewMode === 'monthly') {{
+    var parts = key.split('-');
+    return months[parseInt(parts[1])-1] + ' ' + parts[0];
+  }}
+  return key;
+}}
+
+function setPeriod(period, el) {{
+  periodFilter = period;
+  document.querySelectorAll('#periodTabs .tab').forEach(function(t) {{ t.classList.remove('active'); }});
   if (el) el.classList.add('active');
   applyFilters();
 }}
 
-function applyFilters() {{
-  const dateFrom = document.getElementById('dateFrom').value;
-  const dateTo = document.getElementById('dateTo').value;
-  const pnlF = document.getElementById('pnlFilter').value;
-  const dirF = document.getElementById('dirFilter').value;
+function setView(mode, el) {{
+  viewMode = mode;
+  document.querySelectorAll('#viewTabs .tab').forEach(function(t) {{ t.classList.remove('active'); }});
+  if (el) el.classList.add('active');
+  renderGrouped();
+}}
 
-  filtered = ALL_TRADES.filter(t => {{
-    if (currentStrategy !== 'ALL' && t.strategy !== currentStrategy) return false;
-    if (dateFrom && t.date < dateFrom) return false;
-    if (dateTo && t.date > dateTo) return false;
-    if (pnlF === 'WIN' && t.net_pnl <= 0) return false;
-    if (pnlF === 'LOSS' && t.net_pnl > 0) return false;
-    if (dirF !== 'ALL') {{
-      const d = t.direction.toUpperCase();
-      if (dirF === 'BUY' && d !== 'BUY' && d !== 'LONG') return false;
-      if (dirF === 'SELL' && d !== 'SELL' && d !== 'SHORT') return false;
-      if (dirF === 'STRANGLE' && d !== 'STRANGLE') return false;
-    }}
+function applyFilters() {{
+  strategyFilter = document.getElementById('stratFilter').value;
+  var now = new Date();
+  var cutoff = null;
+  if (periodFilter === '1M') cutoff = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
+  else if (periodFilter === '3M') cutoff = new Date(now.getFullYear(), now.getMonth() - 3, now.getDate());
+  else if (periodFilter === '6M') cutoff = new Date(now.getFullYear(), now.getMonth() - 6, now.getDate());
+
+  filtered = ALL_TRADES.filter(function(t) {{
+    if (strategyFilter !== 'ALL' && t.strategy !== strategyFilter) return false;
+    if (cutoff && new Date(t.date + 'T00:00:00') < cutoff) return false;
     return true;
   }});
-
-  doSort();
-  currentPage = 1;
-  renderTable();
+  renderGrouped();
 }}
 
-function sortTable(col) {{
-  if (sortCol === col) sortAsc = !sortAsc;
-  else {{ sortCol = col; sortAsc = true; }}
-  doSort();
-  renderTable();
+function renderGrouped() {{
+  var groups = {{}};
+  var groupOrder = [];
+  filtered.forEach(function(t) {{
+    var key = getGroupKey(t.date);
+    if (!groups[key]) {{ groups[key] = []; groupOrder.push(key); }}
+    groups[key].push(t);
+  }});
+  groupOrder.sort(function(a, b) {{ return b.localeCompare(a); }});
+
+  // Cumulative P&L (chronological)
+  var cumPnl = 0;
+  var cumMap = {{}};
+  groupOrder.slice().reverse().forEach(function(key) {{
+    cumPnl += groups[key].reduce(function(s, t) {{ return s + t.net_pnl; }}, 0);
+    cumMap[key] = cumPnl;
+  }});
+
+  var html = '';
+  groupOrder.forEach(function(key, gi) {{
+    var trades = groups[key];
+    var label = getGroupLabel(key);
+    var netPnl = trades.reduce(function(s, t) {{ return s + t.net_pnl; }}, 0);
+    var grossPnl = trades.reduce(function(s, t) {{ return s + t.gross_pnl; }}, 0);
+    var costs = trades.reduce(function(s, t) {{ return s + t.costs; }}, 0);
+    var wins = trades.filter(function(t) {{ return t.net_pnl > 0; }}).length;
+    var losses = trades.length - wins;
+    var winRate = trades.length > 0 ? (wins / trades.length * 100).toFixed(1) : '0.0';
+    var cum = cumMap[key] || 0;
+
+    html += '<tr class="group-row" onclick="toggleGroup(' + gi + ')">';
+    html += '<td><span class="expand-icon" id="icon-' + gi + '">\u25B6</span> ' + label + '</td>';
+    html += '<td>' + trades.length + '</td>';
+    html += '<td style="color:#00c853">' + wins + '</td>';
+    html += '<td style="color:#ff1744">' + losses + '</td>';
+    html += '<td>' + winRate + '%</td>';
+    html += '<td class="' + pnlClass(grossPnl) + '">' + fmt(grossPnl) + '</td>';
+    html += '<td style="color:#f59e0b">' + fmt(-costs) + '</td>';
+    html += '<td class="' + pnlClass(netPnl) + '">' + fmt(netPnl) + '</td>';
+    html += '<td class="' + pnlClass(cum) + '">' + fmt(cum) + '</td>';
+    html += '</tr>';
+
+    // Detail rows
+    html += '<tr class="detail-container" id="detail-' + gi + '" style="display:none"><td colspan="9" style="padding:0 8px 8px 8px">';
+    html += '<table class="detail-table"><thead><tr><th>#</th><th>Time</th><th>Strategy</th><th>Dir</th><th>Instrument</th><th>Entry</th><th>Exit</th><th>Qty</th><th>Gross</th><th>Costs</th><th>Net P&L</th><th>Status</th></tr></thead><tbody>';
+    trades.forEach(function(t, i) {{
+      var color = STRAT_COLORS[t.strategy] || '#8b949e';
+      html += '<tr>';
+      html += '<td style="color:#8b949e">' + (i+1) + '</td>';
+      html += '<td>' + (t.entry_time || t.date) + '</td>';
+      html += '<td><span class="strat-badge" style="background:' + color + '33;color:' + color + '">' + t.strategy + '</span></td>';
+      html += '<td class="' + dirClass(t.direction) + '">' + t.direction + '</td>';
+      html += '<td>' + t.instrument + '</td>';
+      html += '<td>' + (t.entry_price ? t.entry_price.toFixed(2) : '-') + '</td>';
+      html += '<td>' + (t.exit_price ? t.exit_price.toFixed(2) : '-') + '</td>';
+      html += '<td>' + t.qty + '</td>';
+      html += '<td class="' + pnlClass(t.gross_pnl) + '">' + fmt(t.gross_pnl) + '</td>';
+      html += '<td style="color:#f59e0b">' + fmt(-t.costs) + '</td>';
+      html += '<td class="' + pnlClass(t.net_pnl) + '">' + fmt(t.net_pnl) + '</td>';
+      html += '<td style="color:#8b949e;font-size:11px">' + t.status + '</td>';
+      html += '</tr>';
+    }});
+    html += '</tbody></table></td></tr>';
+  }});
+
+  document.getElementById('groupBody').innerHTML = html || '<tr><td colspan="9" style="text-align:center;padding:40px;color:#8b949e">No trades found</td></tr>';
+
+  var totalPnl = filtered.reduce(function(s, t) {{ return s + t.net_pnl; }}, 0);
+  var totalWins = filtered.filter(function(t) {{ return t.net_pnl > 0; }}).length;
+  var viewLabel = viewMode === 'daily' ? 'days' : viewMode === 'weekly' ? 'weeks' : 'months';
+  document.getElementById('tableInfo').textContent = groupOrder.length + ' ' + viewLabel + ' | ' + filtered.length + ' trades (' + totalWins + ' wins, ' + (filtered.length - totalWins) + ' losses)';
+  document.getElementById('filteredPnl').innerHTML = 'Net P&L: <span style="color:' + (totalPnl >= 0 ? '#00c853' : '#ff1744') + ';font-weight:bold">' + fmt(totalPnl) + '</span>';
 }}
 
-function doSort() {{
-  filtered.sort((a, b) => {{
-    let va = a[sortCol], vb = b[sortCol];
-    if (typeof va === 'number') return sortAsc ? va - vb : vb - va;
-    va = String(va); vb = String(vb);
-    return sortAsc ? va.localeCompare(vb) : vb.localeCompare(va);
-  }});
-}}
-
-function renderTable() {{
-  const tbody = document.getElementById('tradeBody');
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  if (currentPage > totalPages) currentPage = totalPages;
-  const start = (currentPage - 1) * PAGE_SIZE;
-  const page = filtered.slice(start, start + PAGE_SIZE);
-
-  // Cumulative P&L (across ALL filtered, not just page)
-  let cumPnl = 0;
-  const cumArr = [];
-  // Sort by date asc for cumulative calc
-  const sortedAll = [...filtered].sort((a,b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0);
-  const cumMap = new Map();
-  sortedAll.forEach((t, i) => {{
-    cumPnl += t.net_pnl;
-    // Use index in filtered array as key
-    const key = t.entry_time + t.strategy + t.net_pnl;
-    cumMap.set(key, cumPnl);
-  }});
-
-  let html = '';
-  page.forEach((t, i) => {{
-    const idx = start + i + 1;
-    const rowClass = t.net_pnl > 0 ? 'win' : t.net_pnl < 0 ? 'loss' : '';
-    const color = STRAT_COLORS[t.strategy] || '#8b949e';
-    const key = t.entry_time + t.strategy + t.net_pnl;
-    const cum = cumMap.get(key) || 0;
-    html += `<tr class="${{rowClass}}">
-      <td style="color:#8b949e">${{idx}}</td>
-      <td>${{t.date}}</td>
-      <td><span class="strat-badge" style="background:${{color}}33;color:${{color}}">${{t.strategy}}</span></td>
-      <td class="${{dirClass(t.direction)}}">${{t.direction}}</td>
-      <td>${{t.instrument}}</td>
-      <td>${{t.entry_price ? t.entry_price.toFixed(2) : '-'}}</td>
-      <td>${{t.exit_price ? t.exit_price.toFixed(2) : '-'}}</td>
-      <td>${{t.qty}}</td>
-      <td class="${{pnlClass(t.gross_pnl)}}">${{fmt(t.gross_pnl)}}</td>
-      <td style="color:#f59e0b">${{fmt(-t.costs)}}</td>
-      <td class="${{pnlClass(t.net_pnl)}}">${{fmt(t.net_pnl)}}</td>
-      <td class="${{pnlClass(cum)}}">${{fmt(cum)}}</td>
-      <td style="color:#8b949e;font-size:11px">${{t.status}}</td>
-    </tr>`;
-  }});
-  tbody.innerHTML = html || '<tr><td colspan="13" style="text-align:center;padding:40px;color:#8b949e">No trades found</td></tr>';
-
-  // Info bar
-  const totalPnl = filtered.reduce((s, t) => s + t.net_pnl, 0);
-  const wins = filtered.filter(t => t.net_pnl > 0).length;
-  document.getElementById('tableInfo').textContent = `Showing ${{filtered.length}} trades (${{wins}} wins, ${{filtered.length - wins}} losses)`;
-  document.getElementById('filteredPnl').innerHTML = `Filtered P&L: <span style="color:${{totalPnl >= 0 ? '#00c853' : '#ff1744'}};font-weight:bold">${{fmt(totalPnl)}}</span>`;
-
-  // Pagination
-  let pgHtml = `<button class="page-btn" onclick="goPage(1)" ${{currentPage===1?'disabled':''}}>«</button>`;
-  pgHtml += `<button class="page-btn" onclick="goPage(${{currentPage-1}})" ${{currentPage===1?'disabled':''}}>‹</button>`;
-  const maxBtns = 7;
-  let pStart = Math.max(1, currentPage - 3);
-  let pEnd = Math.min(totalPages, pStart + maxBtns - 1);
-  if (pEnd - pStart < maxBtns - 1) pStart = Math.max(1, pEnd - maxBtns + 1);
-  for (let p = pStart; p <= pEnd; p++) {{
-    pgHtml += `<button class="page-btn ${{p===currentPage?'active':''}}" onclick="goPage(${{p}})">${{p}}</button>`;
+function toggleGroup(idx) {{
+  var detail = document.getElementById('detail-' + idx);
+  var icon = document.getElementById('icon-' + idx);
+  if (detail.style.display === 'none') {{
+    detail.style.display = 'table-row';
+    icon.textContent = '\u25BC';
+  }} else {{
+    detail.style.display = 'none';
+    icon.textContent = '\u25B6';
   }}
-  pgHtml += `<button class="page-btn" onclick="goPage(${{currentPage+1}})" ${{currentPage>=totalPages?'disabled':''}}>›</button>`;
-  pgHtml += `<button class="page-btn" onclick="goPage(${{totalPages}})" ${{currentPage>=totalPages?'disabled':''}}>»</button>`;
-  pgHtml += `<span class="page-info">${{currentPage}} / ${{totalPages}}</span>`;
-  document.getElementById('pagination').innerHTML = pgHtml;
-}}
-
-function goPage(p) {{
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  currentPage = Math.max(1, Math.min(p, totalPages));
-  renderTable();
-  document.getElementById('tradeTable').scrollIntoView({{behavior:'smooth'}});
 }}
 
 function resetFilters() {{
-  document.getElementById('dateFrom').value = '{date_min}';
-  document.getElementById('dateTo').value = '{date_max}';
-  document.getElementById('pnlFilter').value = 'ALL';
-  document.getElementById('dirFilter').value = 'ALL';
-  filterStrategy('ALL', document.querySelector('.tab[data-strategy="ALL"]'));
+  document.getElementById('stratFilter').value = 'ALL';
+  setPeriod('ALL', document.querySelector('#periodTabs .tab[data-period="ALL"]'));
+  setView('daily', document.querySelector('#viewTabs .tab[data-view="daily"]'));
 }}
 
 function exportCSV() {{
   if (filtered.length === 0) return;
-  const headers = ['Date','Entry Time','Exit Time','Strategy','Direction','Instrument','Entry Price','Exit Price','Qty','Gross PnL','Costs','Net PnL','Status'];
-  let csv = headers.join(',') + '\\n';
-  filtered.forEach(t => {{
-    csv += [t.date,t.entry_time,t.exit_time,t.strategy,t.direction,`"${{t.instrument}}"`,t.entry_price,t.exit_price,t.qty,t.gross_pnl,t.costs,t.net_pnl,t.status].join(',') + '\\n';
+  var headers = ['Date','Entry Time','Exit Time','Strategy','Direction','Instrument','Entry Price','Exit Price','Qty','Gross PnL','Costs','Net PnL','Status'];
+  var csv = headers.join(',') + '\\n';
+  filtered.forEach(function(t) {{
+    csv += [t.date,t.entry_time,t.exit_time,t.strategy,t.direction,'"'+t.instrument+'"',t.entry_price,t.exit_price,t.qty,t.gross_pnl,t.costs,t.net_pnl,t.status].join(',') + '\\n';
   }});
-  const blob = new Blob([csv], {{type:'text/csv'}});
-  const a = document.createElement('a');
+  var blob = new Blob([csv], {{type:'text/csv'}});
+  var a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = 'tradebook_' + new Date().toISOString().slice(0,10) + '.csv';
   a.click();
@@ -685,7 +664,6 @@ def main():
 
     print(f"  Saved: {TRADEBOOK_FILE}")
 
-    # Quick summary
     ema_count = len(load_csv(EMA_TRADE_LOG))
     sap_count = len(load_csv(SAPPHIRE_TRADE_LOG))
     mom_count = len(load_csv(MOMENTUM_TRADE_LOG))

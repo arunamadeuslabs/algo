@@ -106,6 +106,30 @@ def filter_today(df: pd.DataFrame, date_col: str) -> pd.DataFrame:
     return df[df[date_col].astype(str).str.startswith(today)]
 
 
+def filter_week(df: pd.DataFrame, date_col: str) -> pd.DataFrame:
+    """Filter trades from the current week (Monday-today)."""
+    today = date.today()
+    monday = today - timedelta(days=today.weekday())
+    monday_str = str(monday)
+    today_str = str(today)
+    if df.empty or date_col not in df.columns:
+        return pd.DataFrame()
+    dates = df[date_col].astype(str).str[:10]
+    return df[(dates >= monday_str) & (dates <= today_str)]
+
+
+def filter_month(df: pd.DataFrame, date_col: str) -> pd.DataFrame:
+    """Filter trades from the current month."""
+    today = date.today()
+    month_start = today.replace(day=1)
+    month_str = str(month_start)
+    today_str = str(today)
+    if df.empty or date_col not in df.columns:
+        return pd.DataFrame()
+    dates = df[date_col].astype(str).str[:10]
+    return df[(dates >= month_str) & (dates <= today_str)]
+
+
 def calc_stats(df: pd.DataFrame, pnl_col: str = "net_pnl") -> dict:
     if df.empty or pnl_col not in df.columns:
         return {"trades": 0, "wins": 0, "losses": 0, "win_rate": 0,
@@ -136,8 +160,12 @@ def generate_report() -> dict:
     ema_all = load_trades(EMA_TRADE_LOG)
     ema_state = load_state(EMA_STATE)
     ema_today = filter_today(ema_all, "entry_time") if not ema_all.empty else pd.DataFrame()
+    ema_week = filter_week(ema_all, "entry_time") if not ema_all.empty else pd.DataFrame()
+    ema_month = filter_month(ema_all, "entry_time") if not ema_all.empty else pd.DataFrame()
     report["ema"] = {
         "today": calc_stats(ema_today),
+        "week": calc_stats(ema_week),
+        "month": calc_stats(ema_month),
         "all_time": calc_stats(ema_all),
         "capital": ema_state.get("capital", 500000),
         "initial_capital": ema_state.get("initial_capital", 500000),
@@ -149,8 +177,12 @@ def generate_report() -> dict:
     sap_all = load_trades(SAPPHIRE_TRADE_LOG)
     sap_state = load_state(SAPPHIRE_STATE)
     sap_today = filter_today(sap_all, "date") if not sap_all.empty else pd.DataFrame()
+    sap_week = filter_week(sap_all, "date") if not sap_all.empty else pd.DataFrame()
+    sap_month = filter_month(sap_all, "date") if not sap_all.empty else pd.DataFrame()
     report["sapphire"] = {
         "today": calc_stats(sap_today),
+        "week": calc_stats(sap_week),
+        "month": calc_stats(sap_month),
         "all_time": calc_stats(sap_all),
         "capital": sap_state.get("capital", 150000),
         "initial_capital": sap_state.get("initial_capital", 150000),
@@ -162,8 +194,12 @@ def generate_report() -> dict:
     mom_all = load_trades(MOMENTUM_TRADE_LOG)
     mom_state = load_state(MOMENTUM_STATE)
     mom_today = filter_today(mom_all, "date") if not mom_all.empty else pd.DataFrame()
+    mom_week = filter_week(mom_all, "date") if not mom_all.empty else pd.DataFrame()
+    mom_month = filter_month(mom_all, "date") if not mom_all.empty else pd.DataFrame()
     report["momentum"] = {
         "today": calc_stats(mom_today),
+        "week": calc_stats(mom_week),
+        "month": calc_stats(mom_month),
         "all_time": calc_stats(mom_all),
         "capital": mom_state.get("capital", 400000),
         "initial_capital": mom_state.get("initial_capital", 400000),
@@ -175,8 +211,12 @@ def generate_report() -> dict:
     st_all = load_trades(SUPERTREND_TRADE_LOG)
     st_state = load_state(SUPERTREND_STATE)
     st_today = filter_today(st_all, "date") if not st_all.empty else pd.DataFrame()
+    st_week = filter_week(st_all, "date") if not st_all.empty else pd.DataFrame()
+    st_month = filter_month(st_all, "date") if not st_all.empty else pd.DataFrame()
     report["supertrend"] = {
         "today": calc_stats(st_today),
+        "week": calc_stats(st_week),
+        "month": calc_stats(st_month),
         "all_time": calc_stats(st_all),
         "capital": st_state.get("capital", 300000),
         "initial_capital": st_state.get("initial_capital", 300000),
@@ -202,6 +242,10 @@ def generate_report() -> dict:
         "total_return_pct": round((total_cap / total_init - 1) * 100, 2) if total_init > 0 else 0,
         "today_pnl": round(report["ema"]["today"]["total_pnl"] + report["sapphire"]["today"]["total_pnl"] + report["momentum"]["today"]["total_pnl"] + report["supertrend"]["today"]["total_pnl"], 2),
         "today_trades": report["ema"]["today"]["trades"] + report["sapphire"]["today"]["trades"] + report["momentum"]["today"]["trades"] + report["supertrend"]["today"]["trades"],
+        "week_pnl": round(report["ema"]["week"]["total_pnl"] + report["sapphire"]["week"]["total_pnl"] + report["momentum"]["week"]["total_pnl"] + report["supertrend"]["week"]["total_pnl"], 2),
+        "week_trades": report["ema"]["week"]["trades"] + report["sapphire"]["week"]["trades"] + report["momentum"]["week"]["trades"] + report["supertrend"]["week"]["trades"],
+        "month_pnl": round(report["ema"]["month"]["total_pnl"] + report["sapphire"]["month"]["total_pnl"] + report["momentum"]["month"]["total_pnl"] + report["supertrend"]["month"]["total_pnl"], 2),
+        "month_trades": report["ema"]["month"]["trades"] + report["sapphire"]["month"]["trades"] + report["momentum"]["month"]["trades"] + report["supertrend"]["month"]["trades"],
     }
     return report
 
@@ -214,12 +258,12 @@ def generate_dashboard(report: dict) -> str:
         return "#ffffff"
 
     def pnl_icon(val):
-        if val > 0: return "▲"
-        elif val < 0: return "▼"
-        return "─"
+        if val > 0: return "\u25B2"
+        elif val < 0: return "\u25BC"
+        return "\u2500"
 
     def format_inr(val):
-        return f"₹{val:+,.2f}" if val != 0 else "₹0.00"
+        return f"\u20b9{val:+,.2f}" if val != 0 else "\u20b90.00"
 
     ema = report["ema"]
     sap = report["sapphire"]
@@ -227,34 +271,42 @@ def generate_dashboard(report: dict) -> str:
     st = report["supertrend"]
     comb = report["combined"]
 
-    ema_rows = ""
-    for t in ema.get("today_trades_detail", []):
-        pnl = t.get("net_pnl", t.get("pnl", 0))
-        ema_rows += f'<tr><td>{t.get("entry_time","N/A")[:16]}</td><td>{t.get("type",t.get("signal","N/A"))}</td><td>{t.get("entry_price","N/A")}</td><td>{t.get("exit_price","N/A")}</td><td style="color:{pnl_color(pnl)};font-weight:bold">{format_inr(pnl)}</td><td>{t.get("exit_reason","N/A")}</td></tr>'
+    # Build strategy stat sections for each period
+    strategies = [
+        ("EMA Crossover", "#22c55e", ema),
+        ("Sapphire Short Strangle", "#3b82f6", sap),
+        ("Momentum", "#f97316", mom),
+        ("Supertrend VWAP Scalping", "#14b8a6", st),
+    ]
 
-    sap_rows = ""
-    for t in sap.get("today_trades_detail", []):
-        pnl = t.get("net_pnl", 0)
-        sap_rows += f'<tr><td>{t.get("date","N/A")}</td><td>CE:{t.get("ce_strike","?")} / PE:{t.get("pe_strike","?")}</td><td>{t.get("entry_spot","N/A")}</td><td>{t.get("exit_spot","N/A")}</td><td style="color:{pnl_color(pnl)};font-weight:bold">{format_inr(pnl)}</td><td>{t.get("exit_reason","N/A")}</td></tr>'
+    def build_strat_sections(period_key, period_label):
+        sections = ""
+        for name, color, data in strategies:
+            p = data[period_key]
+            sections += f'''<div class="section" style="margin-bottom:0;border-top:3px solid {color}">
+<h2 style="color:{color}">{name}</h2>
+<div class="stat-grid">
+<div class="stat-item"><div class="label">Capital</div><div class="val">\u20b9{data["capital"]:,.0f}</div></div>
+<div class="stat-item"><div class="label">{period_label} P&amp;L</div><div class="val" style="color:{pnl_color(p["total_pnl"])}">{format_inr(p["total_pnl"])}</div></div>
+<div class="stat-item"><div class="label">{period_label} Trades</div><div class="val">{p["trades"]}</div></div>
+<div class="stat-item"><div class="label">{period_label} Win Rate</div><div class="val">{p["win_rate"]}%</div></div>
+<div class="stat-item"><div class="label">All-Time P&amp;L</div><div class="val" style="color:{pnl_color(data["all_time"]["total_pnl"])}">{format_inr(data["all_time"]["total_pnl"])}</div></div>
+<div class="stat-item"><div class="label">Avg Trade</div><div class="val" style="color:{pnl_color(data["all_time"]["avg_pnl"])}">{format_inr(data["all_time"]["avg_pnl"])}</div></div>
+</div></div>'''
+        return sections
 
-    mom_rows = ""
-    for t in mom.get("today_trades_detail", []):
-        pnl = t.get("net_pnl", 0)
-        partial = "Yes" if t.get("partial_exited", False) else "No"
-        mom_rows += f'<tr><td>{t.get("date","N/A")}</td><td>{t.get("direction","N/A")}</td><td>{t.get("entry_price","N/A")}</td><td>{t.get("exit_price","N/A")}</td><td>{partial}</td><td style="color:{pnl_color(pnl)};font-weight:bold">{format_inr(pnl)}</td><td>{t.get("status","N/A")}</td></tr>'
+    daily_sections = build_strat_sections("today", "Today")
+    weekly_sections = build_strat_sections("week", "Week")
+    monthly_sections = build_strat_sections("month", "Month")
 
-    st_rows = ""
-    for t in st.get("today_trades_detail", []):
-        pnl = t.get("net_pnl", 0)
-        st_rows += f'<tr><td>{t.get("date","N/A")}</td><td>{t.get("direction","N/A")}</td><td>{t.get("entry_price","N/A")}</td><td>{t.get("exit_price","N/A")}</td><td style="color:{pnl_color(pnl)};font-weight:bold">{format_inr(pnl)}</td><td>{t.get("status","N/A")}</td></tr>'
-
+    # Daily P&L chart data
     daily_chart_data = []
     for log_path, label in [(EMA_DAILY_LOG, "EMA"), (SAPPHIRE_DAILY_LOG, "Sapphire"), (MOMENTUM_DAILY_LOG, "Momentum"), (SUPERTREND_DAILY_LOG, "Supertrend")]:
         if log_path.exists():
             try:
                 df = pd.read_csv(log_path)
                 for _, row in df.tail(7).iterrows():
-                    daily_chart_data.append({"date": str(row.get("date","")), "pnl": float(row.get("day_pnl",0)), "strategy": label})
+                    daily_chart_data.append({"date": str(row.get("date", "")), "pnl": float(row.get("day_pnl", 0)), "strategy": label})
             except Exception:
                 pass
 
@@ -264,6 +316,8 @@ def generate_dashboard(report: dict) -> str:
         bar_width = min(abs(pnl) / 100, 200)
         bar_color = "#00c853" if pnl >= 0 else "#ff1744"
         daily_rows += f'<tr><td>{d["date"]}</td><td>{d["strategy"]}</td><td style="color:{pnl_color(pnl)};font-weight:bold">{format_inr(pnl)}</td><td><div style="background:{bar_color};height:16px;width:{bar_width}px;border-radius:3px;display:inline-block"></div></td></tr>'
+
+    chart_html = f'<table><tr><th>Date</th><th>Strategy</th><th>P&L</th><th>Bar</th></tr>{daily_rows}</table>' if daily_rows else '<p style="color:#8b949e;text-align:center;padding:20px">No history yet - trades will appear after the first trading day</p>'
 
     html = f'''<!DOCTYPE html>
 <html lang="en">
@@ -293,26 +347,29 @@ tr:hover{{background:#1c2128}}
 .stat-item{{text-align:center;padding:12px;background:#0d1117;border-radius:8px}}
 .stat-item .label{{color:#8b949e;font-size:11px;text-transform:uppercase}}
 .stat-item .val{{font-size:20px;font-weight:700;margin-top:4px}}
+.period-tabs{{display:flex;gap:8px;margin-bottom:24px;justify-content:center}}
+.ptab{{padding:10px 24px;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600;border:1px solid #30363d;background:#161b22;color:#8b949e;transition:all 0.2s}}
+.ptab:hover{{border-color:#58a6ff;color:#e6edf3}}
+.ptab.active{{background:#1f6feb22;border-color:#1f6feb;color:#58a6ff}}
+.period-view{{display:none}}
+.period-view.active{{display:block}}
 .footer{{text-align:center;color:#484f58;font-size:12px;padding:20px 0}}
-@media(max-width:600px){{.cards{{grid-template-columns:1fr}}.stat-grid{{grid-template-columns:repeat(2,1fr)}}body{{padding:12px}}}}
+@media(max-width:600px){{.cards{{grid-template-columns:1fr}}.stat-grid{{grid-template-columns:repeat(2,1fr)}}body{{padding:12px}}.period-tabs{{flex-wrap:wrap}}}}
 </style>
 </head>
 <body>
 <div class="header">
 <h1>Nifty Algo Trading Dashboard</h1>
 <div class="subtitle">Paper Trading | {report["date"]} | Updated {report["generated_at"]}</div>
-<div style="margin-top:8px;font-size:13px"><a href="tradebook.html" style="color:#58a6ff;text-decoration:none">📒 Trade Book →</a></div>
+<div style="margin-top:8px;font-size:13px"><a href="tradebook.html" style="color:#58a6ff;text-decoration:none">Trade Book \u2192</a></div>
 </div>
+
+<!-- All-Time Summary -->
 <div class="cards">
 <div class="card">
-<h3>Today's P&amp;L</h3>
-<div class="value" style="color:{pnl_color(comb["today_pnl"])}">{pnl_icon(comb["today_pnl"])} {format_inr(comb["today_pnl"])}</div>
-<div class="sub">{comb["today_trades"]} trades today</div>
-</div>
-<div class="card">
 <h3>Total Capital</h3>
-<div class="value" style="color:{pnl_color(comb["total_return"])}">₹{comb["total_capital"]:,.0f}</div>
-<div class="sub">Started: ₹{comb["initial_capital"]:,.0f}</div>
+<div class="value" style="color:{pnl_color(comb["total_return"])}">\u20b9{comb["total_capital"]:,.0f}</div>
+<div class="sub">Started: \u20b9{comb["initial_capital"]:,.0f}</div>
 </div>
 <div class="card">
 <h3>All-Time Return</h3>
@@ -320,69 +377,72 @@ tr:hover{{background:#1c2128}}
 <div class="sub">{format_inr(comb["total_return"])} net profit</div>
 </div>
 </div>
+
+<!-- Period Tabs -->
+<div class="period-tabs">
+<button class="ptab active" onclick="showPeriod('daily',this)">Daily</button>
+<button class="ptab" onclick="showPeriod('weekly',this)">Weekly</button>
+<button class="ptab" onclick="showPeriod('monthly',this)">Monthly</button>
+</div>
+
+<!-- DAILY VIEW -->
+<div id="view-daily" class="period-view active">
+<div class="cards" style="margin-bottom:16px">
+<div class="card">
+<h3>Today's P&amp;L</h3>
+<div class="value" style="color:{pnl_color(comb["today_pnl"])}">{pnl_icon(comb["today_pnl"])} {format_inr(comb["today_pnl"])}</div>
+<div class="sub">{comb["today_trades"]} trades today</div>
+</div>
+</div>
 <div class="cards">
-<div class="section" style="margin-bottom:0">
-<h2>EMA Crossover Strategy</h2>
-<div class="stat-grid">
-<div class="stat-item"><div class="label">Capital</div><div class="val">₹{ema["capital"]:,.0f}</div></div>
-<div class="stat-item"><div class="label">Today P&amp;L</div><div class="val" style="color:{pnl_color(ema["today"]["total_pnl"])}">{format_inr(ema["today"]["total_pnl"])}</div></div>
-<div class="stat-item"><div class="label">Total Trades</div><div class="val">{ema["total_trades"]}</div></div>
-<div class="stat-item"><div class="label">Win Rate</div><div class="val">{ema["all_time"]["win_rate"]}%</div></div>
-<div class="stat-item"><div class="label">All-Time P&amp;L</div><div class="val" style="color:{pnl_color(ema["all_time"]["total_pnl"])}">{format_inr(ema["all_time"]["total_pnl"])}</div></div>
-<div class="stat-item"><div class="label">Avg Trade</div><div class="val" style="color:{pnl_color(ema["all_time"]["avg_pnl"])}">{format_inr(ema["all_time"]["avg_pnl"])}</div></div>
-</div></div>
-<div class="section" style="margin-bottom:0">
-<h2>Sapphire Short Strangle</h2>
-<div class="stat-grid">
-<div class="stat-item"><div class="label">Capital</div><div class="val">₹{sap["capital"]:,.0f}</div></div>
-<div class="stat-item"><div class="label">Today P&amp;L</div><div class="val" style="color:{pnl_color(sap["today"]["total_pnl"])}">{format_inr(sap["today"]["total_pnl"])}</div></div>
-<div class="stat-item"><div class="label">Total Trades</div><div class="val">{sap["total_trades"]}</div></div>
-<div class="stat-item"><div class="label">Win Rate</div><div class="val">{sap["all_time"]["win_rate"]}%</div></div>
-<div class="stat-item"><div class="label">All-Time P&amp;L</div><div class="val" style="color:{pnl_color(sap["all_time"]["total_pnl"])}">{format_inr(sap["all_time"]["total_pnl"])}</div></div>
-<div class="stat-item"><div class="label">Avg Trade</div><div class="val" style="color:{pnl_color(sap["all_time"]["avg_pnl"])}">{format_inr(sap["all_time"]["avg_pnl"])}</div></div>
-</div></div>
-<div class="section" style="margin-bottom:0">
-<h2>🚀 Momentum (Dual Confirmation)</h2>
-<div class="stat-grid">
-<div class="stat-item"><div class="label">Capital</div><div class="val">₹{mom["capital"]:,.0f}</div></div>
-<div class="stat-item"><div class="label">Today P&amp;L</div><div class="val" style="color:{pnl_color(mom["today"]["total_pnl"])}">{format_inr(mom["today"]["total_pnl"])}</div></div>
-<div class="stat-item"><div class="label">Total Trades</div><div class="val">{mom["total_trades"]}</div></div>
-<div class="stat-item"><div class="label">Win Rate</div><div class="val">{mom["all_time"]["win_rate"]}%</div></div>
-<div class="stat-item"><div class="label">All-Time P&amp;L</div><div class="val" style="color:{pnl_color(mom["all_time"]["total_pnl"])}">{format_inr(mom["all_time"]["total_pnl"])}</div></div>
-<div class="stat-item"><div class="label">Avg Trade</div><div class="val" style="color:{pnl_color(mom["all_time"]["avg_pnl"])}">{format_inr(mom["all_time"]["avg_pnl"])}</div></div>
-</div></div>
-<div class="section" style="margin-bottom:0">
-<h2>🎯 Supertrend VWAP Scalping</h2>
-<div class="stat-grid">
-<div class="stat-item"><div class="label">Capital</div><div class="val">₹{st["capital"]:,.0f}</div></div>
-<div class="stat-item"><div class="label">Today P&amp;L</div><div class="val" style="color:{pnl_color(st["today"]["total_pnl"])}">{format_inr(st["today"]["total_pnl"])}</div></div>
-<div class="stat-item"><div class="label">Total Trades</div><div class="val">{st["total_trades"]}</div></div>
-<div class="stat-item"><div class="label">Win Rate</div><div class="val">{st["all_time"]["win_rate"]}%</div></div>
-<div class="stat-item"><div class="label">All-Time P&amp;L</div><div class="val" style="color:{pnl_color(st["all_time"]["total_pnl"])}">{format_inr(st["all_time"]["total_pnl"])}</div></div>
-<div class="stat-item"><div class="label">Avg Trade</div><div class="val" style="color:{pnl_color(st["all_time"]["avg_pnl"])}">{format_inr(st["all_time"]["avg_pnl"])}</div></div>
-</div></div>
+{daily_sections}
 </div>
-<div class="section">
-<h2>Today's Trades - EMA Crossover</h2>
-{"<table><tr><th>Time</th><th>Type</th><th>Entry</th><th>Exit</th><th>P&L</th><th>Exit Reason</th></tr>" + ema_rows + "</table>" if ema_rows else '<p style="color:#8b949e;text-align:center;padding:20px">No trades today</p>'}
 </div>
-<div class="section">
-<h2>Today's Trades - Sapphire Strangle</h2>
-{"<table><tr><th>Date</th><th>Strikes</th><th>Entry Spot</th><th>Exit Spot</th><th>P&L</th><th>Exit Reason</th></tr>" + sap_rows + "</table>" if sap_rows else '<p style="color:#8b949e;text-align:center;padding:20px">No trades today</p>'}
+
+<!-- WEEKLY VIEW -->
+<div id="view-weekly" class="period-view">
+<div class="cards" style="margin-bottom:16px">
+<div class="card">
+<h3>This Week's P&amp;L</h3>
+<div class="value" style="color:{pnl_color(comb["week_pnl"])}">{pnl_icon(comb["week_pnl"])} {format_inr(comb["week_pnl"])}</div>
+<div class="sub">{comb["week_trades"]} trades this week</div>
 </div>
-<div class="section">
-<h2>Today's Trades - Momentum</h2>
-{"<table><tr><th>Date</th><th>Direction</th><th>Entry</th><th>Exit</th><th>Partial</th><th>P&L</th><th>Status</th></tr>" + mom_rows + "</table>" if mom_rows else '<p style="color:#8b949e;text-align:center;padding:20px">No trades today</p>'}
 </div>
-<div class="section">
-<h2>Today's Trades - Supertrend VWAP</h2>
-{"<table><tr><th>Date</th><th>Direction</th><th>Entry</th><th>Exit</th><th>P&L</th><th>Status</th></tr>" + st_rows + "</table>" if st_rows else '<p style="color:#8b949e;text-align:center;padding:20px">No trades today</p>'}
+<div class="cards">
+{weekly_sections}
 </div>
+</div>
+
+<!-- MONTHLY VIEW -->
+<div id="view-monthly" class="period-view">
+<div class="cards" style="margin-bottom:16px">
+<div class="card">
+<h3>This Month's P&amp;L</h3>
+<div class="value" style="color:{pnl_color(comb["month_pnl"])}">{pnl_icon(comb["month_pnl"])} {format_inr(comb["month_pnl"])}</div>
+<div class="sub">{comb["month_trades"]} trades this month</div>
+</div>
+</div>
+<div class="cards">
+{monthly_sections}
+</div>
+</div>
+
+<!-- Daily P&L Chart (always visible) -->
 <div class="section">
 <h2>Recent Daily P&amp;L</h2>
-{"<table><tr><th>Date</th><th>Strategy</th><th>P&L</th><th>Bar</th></tr>" + daily_rows + "</table>" if daily_rows else '<p style="color:#8b949e;text-align:center;padding:20px">No history yet - trades will appear after the first trading day</p>'}
+{chart_html}
 </div>
+
 <div class="footer">Nifty Algo Trader - Paper Trading Dashboard - Auto-refreshes every 5 minutes</div>
+
+<script>
+function showPeriod(period, el) {{
+  document.querySelectorAll('.period-view').forEach(function(v) {{ v.classList.remove('active'); }});
+  document.getElementById('view-' + period).classList.add('active');
+  document.querySelectorAll('.ptab').forEach(function(t) {{ t.classList.remove('active'); }});
+  if (el) el.classList.add('active');
+}}
+</script>
 </body></html>'''
     return html
 
@@ -406,59 +466,59 @@ def generate_email_body(report: dict) -> str:
             <tr>
                 <td style="text-align:center;padding:12px;background:#16213e;border-radius:8px 0 0 8px">
                     <div style="color:#888;font-size:11px">TODAY P&amp;L</div>
-                    <div style="font-size:24px;font-weight:bold;color:{clr(comb["today_pnl"])}">₹{comb["today_pnl"]:+,.2f}</div>
+                    <div style="font-size:24px;font-weight:bold;color:{clr(comb["today_pnl"])}">\u20b9{comb["today_pnl"]:+,.2f}</div>
                     <div style="color:#888;font-size:12px">{comb["today_trades"]} trades</div>
                 </td>
                 <td style="text-align:center;padding:12px;background:#16213e">
                     <div style="color:#888;font-size:11px">TOTAL CAPITAL</div>
-                    <div style="font-size:24px;font-weight:bold">₹{comb["total_capital"]:,.0f}</div>
-                    <div style="color:#888;font-size:12px">from ₹{comb["initial_capital"]:,.0f}</div>
+                    <div style="font-size:24px;font-weight:bold">\u20b9{comb["total_capital"]:,.0f}</div>
+                    <div style="color:#888;font-size:12px">from \u20b9{comb["initial_capital"]:,.0f}</div>
                 </td>
                 <td style="text-align:center;padding:12px;background:#16213e;border-radius:0 8px 8px 0">
                     <div style="color:#888;font-size:11px">TOTAL RETURN</div>
                     <div style="font-size:24px;font-weight:bold;color:{clr(comb["total_return"])}">{comb["total_return_pct"]:+.2f}%</div>
-                    <div style="color:#888;font-size:12px">₹{comb["total_return"]:+,.2f}</div>
+                    <div style="color:#888;font-size:12px">\u20b9{comb["total_return"]:+,.2f}</div>
                 </td>
             </tr>
         </table>
         <div style="background:#16213e;border-radius:8px;padding:16px;margin-bottom:12px">
             <h3 style="color:#58a6ff;margin-bottom:8px;font-size:14px">EMA Crossover</h3>
             <table style="width:100%;font-size:13px">
-                <tr><td style="color:#888;padding:4px 0">Today P&amp;L</td><td style="text-align:right;color:{clr(ema["today"]["total_pnl"])};font-weight:bold">₹{ema["today"]["total_pnl"]:+,.2f}</td></tr>
+                <tr><td style="color:#888;padding:4px 0">Today P&amp;L</td><td style="text-align:right;color:{clr(ema["today"]["total_pnl"])};font-weight:bold">\u20b9{ema["today"]["total_pnl"]:+,.2f}</td></tr>
                 <tr><td style="color:#888;padding:4px 0">Today Trades</td><td style="text-align:right">{ema["today"]["trades"]} ({ema["today"]["wins"]}W / {ema["today"]["losses"]}L)</td></tr>
-                <tr><td style="color:#888;padding:4px 0">Capital</td><td style="text-align:right">₹{ema["capital"]:,.0f}</td></tr>
+                <tr><td style="color:#888;padding:4px 0">Capital</td><td style="text-align:right">\u20b9{ema["capital"]:,.0f}</td></tr>
                 <tr><td style="color:#888;padding:4px 0">All-Time Win Rate</td><td style="text-align:right">{ema["all_time"]["win_rate"]}% ({ema["total_trades"]} trades)</td></tr>
-                <tr><td style="color:#888;padding:4px 0">All-Time P&amp;L</td><td style="text-align:right;color:{clr(ema["all_time"]["total_pnl"])};font-weight:bold">₹{ema["all_time"]["total_pnl"]:+,.2f}</td></tr>
+                <tr><td style="color:#888;padding:4px 0">All-Time P&amp;L</td><td style="text-align:right;color:{clr(ema["all_time"]["total_pnl"])};font-weight:bold">\u20b9{ema["all_time"]["total_pnl"]:+,.2f}</td></tr>
             </table>
         </div>
         <div style="background:#16213e;border-radius:8px;padding:16px;margin-bottom:12px">
             <h3 style="color:#58a6ff;margin-bottom:8px;font-size:14px">Sapphire Short Strangle</h3>
             <table style="width:100%;font-size:13px">
-                <tr><td style="color:#888;padding:4px 0">Today P&amp;L</td><td style="text-align:right;color:{clr(sap["today"]["total_pnl"])};font-weight:bold">₹{sap["today"]["total_pnl"]:+,.2f}</td></tr>
+                <tr><td style="color:#888;padding:4px 0">Today P&amp;L</td><td style="text-align:right;color:{clr(sap["today"]["total_pnl"])};font-weight:bold">\u20b9{sap["today"]["total_pnl"]:+,.2f}</td></tr>
                 <tr><td style="color:#888;padding:4px 0">Today Trades</td><td style="text-align:right">{sap["today"]["trades"]} ({sap["today"]["wins"]}W / {sap["today"]["losses"]}L)</td></tr>
-                <tr><td style="color:#888;padding:4px 0">Capital</td><td style="text-align:right">₹{sap["capital"]:,.0f}</td></tr>
+                <tr><td style="color:#888;padding:4px 0">Capital</td><td style="text-align:right">\u20b9{sap["capital"]:,.0f}</td></tr>
                 <tr><td style="color:#888;padding:4px 0">All-Time Win Rate</td><td style="text-align:right">{sap["all_time"]["win_rate"]}% ({sap["total_trades"]} trades)</td></tr>
-                <tr><td style="color:#888;padding:4px 0">All-Time P&amp;L</td><td style="text-align:right;color:{clr(sap["all_time"]["total_pnl"])};font-weight:bold">₹{sap["all_time"]["total_pnl"]:+,.2f}</td></tr>
+                <tr><td style="color:#888;padding:4px 0">All-Time P&amp;L</td><td style="text-align:right;color:{clr(sap["all_time"]["total_pnl"])};font-weight:bold">\u20b9{sap["all_time"]["total_pnl"]:+,.2f}</td></tr>
             </table>
         </div>
         <div style="background:#16213e;border-radius:8px;padding:16px;margin-bottom:12px">
-            <h3 style="color:#f97316;margin-bottom:8px;font-size:14px">🚀 Momentum (Dual Confirmation)</h3>
+            <h3 style="color:#f97316;margin-bottom:8px;font-size:14px">Momentum (Dual Confirmation)</h3>
             <table style="width:100%;font-size:13px">
-                <tr><td style="color:#888;padding:4px 0">Today P&amp;L</td><td style="text-align:right;color:{clr(mom["today"]["total_pnl"])};font-weight:bold">₹{mom["today"]["total_pnl"]:+,.2f}</td></tr>
+                <tr><td style="color:#888;padding:4px 0">Today P&amp;L</td><td style="text-align:right;color:{clr(mom["today"]["total_pnl"])};font-weight:bold">\u20b9{mom["today"]["total_pnl"]:+,.2f}</td></tr>
                 <tr><td style="color:#888;padding:4px 0">Today Trades</td><td style="text-align:right">{mom["today"]["trades"]} ({mom["today"]["wins"]}W / {mom["today"]["losses"]}L)</td></tr>
-                <tr><td style="color:#888;padding:4px 0">Capital</td><td style="text-align:right">₹{mom["capital"]:,.0f}</td></tr>
+                <tr><td style="color:#888;padding:4px 0">Capital</td><td style="text-align:right">\u20b9{mom["capital"]:,.0f}</td></tr>
                 <tr><td style="color:#888;padding:4px 0">All-Time Win Rate</td><td style="text-align:right">{mom["all_time"]["win_rate"]}% ({mom["total_trades"]} trades)</td></tr>
-                <tr><td style="color:#888;padding:4px 0">All-Time P&amp;L</td><td style="text-align:right;color:{clr(mom["all_time"]["total_pnl"])};font-weight:bold">₹{mom["all_time"]["total_pnl"]:+,.2f}</td></tr>
+                <tr><td style="color:#888;padding:4px 0">All-Time P&amp;L</td><td style="text-align:right;color:{clr(mom["all_time"]["total_pnl"])};font-weight:bold">\u20b9{mom["all_time"]["total_pnl"]:+,.2f}</td></tr>
             </table>
         </div>
         <div style="background:#16213e;border-radius:8px;padding:16px;margin-bottom:12px">
-            <h3 style="color:#14b8a6;margin-bottom:8px;font-size:14px">🎯 Supertrend VWAP Scalping</h3>
+            <h3 style="color:#14b8a6;margin-bottom:8px;font-size:14px">Supertrend VWAP Scalping</h3>
             <table style="width:100%;font-size:13px">
-                <tr><td style="color:#888;padding:4px 0">Today P&amp;L</td><td style="text-align:right;color:{clr(st["today"]["total_pnl"])};font-weight:bold">₹{st["today"]["total_pnl"]:+,.2f}</td></tr>
+                <tr><td style="color:#888;padding:4px 0">Today P&amp;L</td><td style="text-align:right;color:{clr(st["today"]["total_pnl"])};font-weight:bold">\u20b9{st["today"]["total_pnl"]:+,.2f}</td></tr>
                 <tr><td style="color:#888;padding:4px 0">Today Trades</td><td style="text-align:right">{st["today"]["trades"]} ({st["today"]["wins"]}W / {st["today"]["losses"]}L)</td></tr>
-                <tr><td style="color:#888;padding:4px 0">Capital</td><td style="text-align:right">₹{st["capital"]:,.0f}</td></tr>
+                <tr><td style="color:#888;padding:4px 0">Capital</td><td style="text-align:right">\u20b9{st["capital"]:,.0f}</td></tr>
                 <tr><td style="color:#888;padding:4px 0">All-Time Win Rate</td><td style="text-align:right">{st["all_time"]["win_rate"]}% ({st["total_trades"]} trades)</td></tr>
-                <tr><td style="color:#888;padding:4px 0">All-Time P&amp;L</td><td style="text-align:right;color:{clr(st["all_time"]["total_pnl"])};font-weight:bold">₹{st["all_time"]["total_pnl"]:+,.2f}</td></tr>
+                <tr><td style="color:#888;padding:4px 0">All-Time P&amp;L</td><td style="text-align:right;color:{clr(st["all_time"]["total_pnl"])};font-weight:bold">\u20b9{st["all_time"]["total_pnl"]:+,.2f}</td></tr>
             </table>
         </div>
         <hr style="border:1px solid #333;margin:16px 0">
@@ -523,8 +583,8 @@ def main():
 
     comb = report["combined"]
     print(f"\n  Date: {report['date']}")
-    print(f"  Today P&L: ₹{comb['today_pnl']:+,.2f} ({comb['today_trades']} trades)")
-    print(f"  Total Capital: ₹{comb['total_capital']:,.0f}")
+    print(f"  Today P&L: \u20b9{comb['today_pnl']:+,.2f} ({comb['today_trades']} trades)")
+    print(f"  Total Capital: \u20b9{comb['total_capital']:,.0f}")
     print(f"  Total Return: {comb['total_return_pct']:+.2f}%")
 
     if args.test:
