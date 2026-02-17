@@ -28,10 +28,9 @@ import numpy as np
 
 # Ensure sapphire directory imports work FIRST
 SAPPHIRE_DIR = os.path.dirname(os.path.abspath(__file__))
+_ROOT_DIR = os.path.dirname(SAPPHIRE_DIR)
 sys.path.insert(0, SAPPHIRE_DIR)
-
-# Dhan API lives in backtest/
-BACKTEST_DIR = os.path.join(SAPPHIRE_DIR, '..', 'backtest')
+sys.path.insert(0, _ROOT_DIR)
 
 from config import (
     INITIAL_CAPITAL, OPTION_LOT_SIZE, NUM_LOTS,
@@ -49,15 +48,7 @@ from data_utils import (
     black_scholes_price, get_atm_strike, get_otm_strikes, generate_nifty_data,
 )
 from strategy import calculate_costs, LegStatus
-
-# Import Dhan API from backtest directory using importlib
-import importlib.util
-_dhan_spec = importlib.util.spec_from_file_location("dhan_fetch", os.path.join(BACKTEST_DIR, "dhan_fetch.py"))
-_dhan_mod = importlib.util.module_from_spec(_dhan_spec)
-_dhan_spec.loader.exec_module(_dhan_mod)
-fetch_nifty_intraday = _dhan_mod.fetch_nifty_intraday
-fetch_nifty_ltp = _dhan_mod.fetch_nifty_ltp
-fetch_nifty_ohlc = _dhan_mod.fetch_nifty_ohlc
+import dhan_api
 
 # ── Constants ────────────────────────────────────────────────
 PAPER_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "paper_trades")
@@ -152,11 +143,12 @@ class SapphirePaperEngine:
     """
 
     def __init__(self, interval: int = 5, capital: float = INITIAL_CAPITAL,
-                 resume: bool = False):
+                 resume: bool = False, symbol: str = "nifty"):
         self.interval = interval
         self.capital = capital
         self.initial_capital = capital
         self.quantity = OPTION_LOT_SIZE * NUM_LOTS
+        self.symbol = symbol
 
         self.current_trade: Optional[PaperStrangle] = None
         self.closed_trades: List[PaperStrangle] = []
@@ -449,11 +441,11 @@ class SapphirePaperEngine:
 
     # ── Data Fetching ────────────────────────────────────────
     def _fetch_candles(self, days_back: int = 5) -> Optional[pd.DataFrame]:
-        """Fetch Nifty intraday candles from Dhan API."""
+        """Fetch intraday candles from Dhan API."""
         try:
             interval_map = {"1min": 1, "5min": 5, "15min": 15}
             interval = interval_map.get(TIMEFRAME, 5)
-            df = fetch_nifty_intraday(interval=interval, days_back=days_back)
+            df = dhan_api.fetch_intraday(self.symbol, interval=interval, days_back=days_back)
 
             if df is not None and not df.empty:
                 logger.debug(f"Fetched {len(df)} candles from Dhan ({df.index[0]} to {df.index[-1]})")
@@ -503,7 +495,7 @@ class SapphirePaperEngine:
             if now > market_close:
                 # EOD: square off if still open
                 if self.current_trade and self.current_trade.is_open:
-                    spot = fetch_nifty_ltp() or 0
+                    spot = dhan_api.fetch_ltp(self.symbol) or 0
                     if spot > 0:
                         self._square_off(str(now), spot)
                         self._finalize_trade(spot, str(now))
@@ -707,6 +699,9 @@ def main():
     parser.add_argument("--interval", type=int, default=5, help="Candle interval in minutes")
     parser.add_argument("--capital", type=float, default=INITIAL_CAPITAL, help="Starting capital")
     parser.add_argument("--resume", action="store_true", help="Resume from saved state")
+    parser.add_argument("--symbol", type=str, default="nifty",
+                        choices=["nifty", "banknifty", "finnifty", "midcapnifty", "sensex"],
+                        help="Index to trade (default: nifty)")
 
     args = parser.parse_args()
 
@@ -714,6 +709,7 @@ def main():
         interval=args.interval,
         capital=args.capital,
         resume=args.resume,
+        symbol=args.symbol,
     )
 
     if args.live:

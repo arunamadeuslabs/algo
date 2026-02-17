@@ -28,10 +28,9 @@ import numpy as np
 
 # Ensure momentum directory imports work
 MOMENTUM_DIR = os.path.dirname(os.path.abspath(__file__))
+_ROOT_DIR = os.path.dirname(MOMENTUM_DIR)
 sys.path.insert(0, MOMENTUM_DIR)
-
-# Dhan API lives in backtest/
-BACKTEST_DIR = os.path.join(MOMENTUM_DIR, '..', 'backtest')
+sys.path.insert(0, _ROOT_DIR)
 
 from config import (
     INITIAL_CAPITAL, NIFTY_LOT_SIZE, MAX_LOTS,
@@ -48,17 +47,7 @@ from config import (
 )
 from data_utils import compute_indicators, generate_nifty_data
 from strategy import Signal, TradeStatus, calculate_costs
-
-# Import Dhan API from backtest directory
-import importlib.util
-_dhan_spec = importlib.util.spec_from_file_location(
-    "dhan_fetch", os.path.join(BACKTEST_DIR, "dhan_fetch.py")
-)
-_dhan_mod = importlib.util.module_from_spec(_dhan_spec)
-_dhan_spec.loader.exec_module(_dhan_mod)
-fetch_nifty_intraday = _dhan_mod.fetch_nifty_intraday
-fetch_nifty_ltp = _dhan_mod.fetch_nifty_ltp
-fetch_nifty_ohlc = _dhan_mod.fetch_nifty_ohlc
+import dhan_api
 
 # ── Constants ────────────────────────────────────────────────
 PAPER_DIR = os.path.join(MOMENTUM_DIR, "paper_trades")
@@ -154,10 +143,11 @@ class MomentumPaperEngine:
     """
 
     def __init__(self, interval: int = 5, capital: float = INITIAL_CAPITAL,
-                 resume: bool = False):
+                 resume: bool = False, symbol: str = "nifty"):
         self.interval = interval
         self.capital = capital
         self.initial_capital = capital
+        self.symbol = symbol
 
         self.current_trade: Optional[PaperTrade] = None
         self.closed_trades: List[PaperTrade] = []
@@ -476,11 +466,11 @@ class MomentumPaperEngine:
 
     # ── Data Fetching ────────────────────────────────────────
     def _fetch_candles(self, days_back: int = 5) -> Optional[pd.DataFrame]:
-        """Fetch Nifty intraday candles from Dhan API."""
+        """Fetch intraday candles from Dhan API."""
         try:
             interval_map = {"1min": 1, "5min": 5, "15min": 15}
             interval = interval_map.get(TIMEFRAME, 5)
-            df = fetch_nifty_intraday(interval=interval, days_back=days_back)
+            df = dhan_api.fetch_intraday(self.symbol, interval=interval, days_back=days_back)
 
             if df is not None and not df.empty:
                 logger.debug(f"Fetched {len(df)} candles from Dhan")
@@ -529,7 +519,7 @@ class MomentumPaperEngine:
 
             if now > market_close:
                 if self.current_trade and self.current_trade.is_open:
-                    spot = fetch_nifty_ltp() or 0
+                    spot = dhan_api.fetch_ltp(self.symbol) or 0
                     if spot > 0:
                         self._close_trade(spot, str(now), "TIME_EXIT")
 
@@ -766,6 +756,9 @@ def main():
     parser.add_argument("--interval", type=int, default=5, help="Candle interval in minutes")
     parser.add_argument("--capital", type=float, default=INITIAL_CAPITAL, help="Starting capital")
     parser.add_argument("--resume", action="store_true", help="Resume from saved state")
+    parser.add_argument("--symbol", type=str, default="nifty",
+                        choices=["nifty", "banknifty", "finnifty", "midcapnifty", "sensex"],
+                        help="Index to trade (default: nifty)")
 
     args = parser.parse_args()
 
@@ -773,6 +766,7 @@ def main():
         interval=args.interval,
         capital=args.capital,
         resume=args.resume,
+        symbol=args.symbol,
     )
 
     if args.live:

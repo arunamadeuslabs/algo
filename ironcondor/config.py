@@ -6,9 +6,9 @@ High-probability credit spread with defined risk.
 """
 
 # --- Capital & Position Sizing ---
-INITIAL_CAPITAL = 400000         # ₹4 Lakh
+INITIAL_CAPITAL = 200000         # ₹2 Lakh (part of ₹10L total)
 OPTION_LOT_SIZE = 15             # Bank Nifty lot size
-NUM_LOTS = 2                     # 2 lots per side
+NUM_LOTS = 3                     # 3 lots per side
 
 # --- Entry Settings ---
 ENTRY_TIME = "10:05"             # Enter after 10 AM (let market settle)
@@ -32,8 +32,8 @@ TARGET_PCT = 0.30                # Close at 30% of credit captured (achievable i
 MAX_TARGET_PCT = 0.50            # Aggressive target: 50% credit capture
 SL_BREACH_PCT = 0.25             # Exit if spot breaches sold strikes by 25% of wing width
 COMBINED_SL_MULTIPLIER = 2.0     # Exit if combined premium rises to 2x of net credit
-MAX_LOSS_PER_DAY = 15000         # Max loss per day in INR (~3.75% of capital)
-DAILY_PROFIT_TARGET = 5000       # ₹5,000 daily target
+MAX_LOSS_PER_DAY = 10000         # Max loss per day in INR (5% of capital)
+DAILY_PROFIT_TARGET = 7500       # ₹7,500 daily target
 
 # --- Range-Bound Filters ---
 # Only enter when market is range-bound
@@ -57,7 +57,7 @@ STAMP_DUTY = 0.00003             # Stamp duty
 
 # --- Data Settings ---
 TIMEFRAME = "5min"               # 5-min candles for intraday
-BACKTEST_DAYS = 365              # 1 year backtest
+BACKTEST_DAYS = 90               # 3 months backtest
 
 # --- Premium Estimation ---
 BANKNIFTY_IV = 16.0              # Approx Bank Nifty IV (%) — baseline

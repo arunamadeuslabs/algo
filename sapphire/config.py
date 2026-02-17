@@ -6,9 +6,9 @@ Sell OTM Call + OTM Put at market open, trail both legs, exit EOD.
 """
 
 # --- Capital & Position Sizing ---
-INITIAL_CAPITAL = 150000         # ₹1.5 Lakh as specified
+INITIAL_CAPITAL = 250000         # ₹2.5 Lakh (part of ₹10L total)
 OPTION_LOT_SIZE = 25             # Nifty lot size
-NUM_LOTS = 1                     # Lots per leg
+NUM_LOTS = 2                     # Lots per leg
 
 # --- Entry Settings ---
 ENTRY_TIME = "09:20"             # Enter at market open
@@ -37,7 +37,7 @@ DEEP_TRAIL_LOCK_PCT = 0.70       # Lock 70% of profits when deep
 
 # --- Combined Position Management ---
 COMBINED_SL_PCT = 0.25           # If combined premium rises 25% from entry, exit both
-MAX_LOSS_PER_DAY = 7500          # Max loss per day in INR (5% of capital)
+MAX_LOSS_PER_DAY = 12500         # Max loss per day in INR (5% of capital)
 
 # --- Momentum Shift Adjustment ---
 MOMENTUM_THRESHOLD = 100         # Nifty moves 100+ pts from entry = momentum
@@ -57,7 +57,7 @@ STAMP_DUTY = 0.00003             # Stamp duty
 
 # --- Data Settings ---
 TIMEFRAME = "5min"               # 5-min candles for intraday
-BACKTEST_DAYS = 365              # 1 year backtest
+BACKTEST_DAYS = 90               # 3 months backtest
 
 # --- Premium Estimation ---
 NIFTY_IV = 12.5                  # Approx Nifty IV (%) — baseline, varies 10-25%

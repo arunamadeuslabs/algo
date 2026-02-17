@@ -1,6 +1,6 @@
 """
 Data utilities for Sapphire Strategy.
-Generates Nifty data and estimates option premiums using Black-Scholes.
+Fetches real Nifty data from Dhan API. Option premiums via Black-Scholes.
 """
 
 import pandas as pd
@@ -8,6 +8,12 @@ import numpy as np
 from datetime import datetime, timedelta
 from scipy.stats import norm
 import os
+import sys
+
+# Add project root to path for shared dhan_api module
+_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _ROOT not in sys.path:
+    sys.path.insert(0, _ROOT)
 
 
 # ─── Black-Scholes Option Pricing ───────────────────────────────────────────
@@ -156,7 +162,41 @@ def simulate_intraday_premiums(spot_series: pd.Series, ce_strike: float,
 
 # ─── Nifty Data Generation ──────────────────────────────────────────────────
 
-def generate_nifty_data(days: int = 365, timeframe: str = "5min",
+# ── Index metadata ──────────────────────────────────────────────────────────
+INDEX_META = {
+    "nifty":       {"name": "Nifty 50",       "lot_size": 25, "strike_step": 50,  "base_price": 22000},
+    "banknifty":   {"name": "Bank Nifty",    "lot_size": 15, "strike_step": 100, "base_price": 48000},
+    "finnifty":    {"name": "Fin Nifty",     "lot_size": 25, "strike_step": 50,  "base_price": 23000},
+    "midcapnifty": {"name": "Midcap Nifty",  "lot_size": 50, "strike_step": 25,  "base_price": 12000},
+    "sensex":      {"name": "Sensex",        "lot_size": 10, "strike_step": 100, "base_price": 72000},
+}
+
+
+def generate_nifty_data(days: int = 90, timeframe: str = "5min",
+                        seed: int = 42, symbol: str = "nifty") -> pd.DataFrame:
+    """
+    Fetch real index data from Dhan API (with caching).
+    Supports 'nifty' or 'banknifty'.  Falls back to synthetic data if API fails.
+    """
+    symbol = symbol.lower()
+    if symbol not in INDEX_META:
+        raise ValueError(f"Unknown symbol '{symbol}'. Choose from: {list(INDEX_META.keys())}")
+
+    try:
+        from dhan_api import get_data, TIMEFRAME_MAP
+        cache_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
+        interval = TIMEFRAME_MAP.get(timeframe, 5)
+        df = get_data(symbol, days=days, interval=interval, cache_dir=cache_dir)
+        if not df.empty:
+            return df
+    except Exception as e:
+        print(f"  ⚠️ Dhan API failed: {e}")
+
+    print("  ⚠️ Falling back to synthetic data...")
+    return _generate_synthetic_nifty_data(days=days, timeframe=timeframe, seed=seed)
+
+
+def _generate_synthetic_nifty_data(days: int = 365, timeframe: str = "5min",
                         seed: int = 42) -> pd.DataFrame:
     """
     Generate realistic Nifty 5-min OHLCV data for 1-year backtest.
@@ -171,16 +211,20 @@ def generate_nifty_data(days: int = 365, timeframe: str = "5min",
     }
     bars_per_day = intervals_map.get(timeframe, 75)
     
-    # Build trading days (exclude weekends)
+    # Build trading days (weekdays only), ending at today — never future dates
     end_date = datetime.now().replace(hour=9, minute=15, second=0, microsecond=0)
-    start_date = end_date - timedelta(days=int(days * 1.5))  # buffer for weekends/holidays
+    start_date = end_date - timedelta(days=int(days * 1.5) + 10)
     
     trading_days = []
     current = start_date
-    while len(trading_days) < days:
+    while current.date() <= end_date.date():
         if current.weekday() < 5:
             trading_days.append(current)
         current += timedelta(days=1)
+    
+    # Take only the last `days` trading days (data ends at today)
+    if len(trading_days) > days:
+        trading_days = trading_days[-days:]
     
     # Generate daily levels first (for realistic gap opens)
     base_price = 22000.0

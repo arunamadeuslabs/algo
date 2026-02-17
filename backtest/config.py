@@ -12,7 +12,7 @@ STOP_LOSS_POINTS = 50          # Fixed SL in Nifty points
 TARGET_POINTS = 100            # Fixed target (1:2 RR)
 RISK_REWARD_RATIO = 2.0        # Minimum R:R
 TRAILING_STOP_USE_EMA = True   # Trail SL using Green MA
-MAX_LOSS_PER_DAY = 5000        # Max loss per day in INR
+MAX_LOSS_PER_DAY = 9000        # Max loss per day in INR (3% of capital)
 
 # --- Premium-based SL/Target (for option selling) ---
 USE_PREMIUM_BASED_EXIT = False # Disabled - using spot-based exits (1:2 RR)
@@ -21,7 +21,7 @@ TARGET_PREMIUM_PCT = 0.60      # Target when premium decays 60% (1:2)
 
 # --- Option Selling Settings ---
 OPTION_LOT_SIZE = 25           # Nifty lot size (updated)
-NUM_LOTS = 1                   # Number of lots to trade
+NUM_LOTS = 3                   # Number of lots to trade
 STRIKE_SELECTION = "ATM"       # ATM / OTM1 / OTM2
 OTM_OFFSET = 50                # OTM strike offset (for OTM selection)
 PREMIUM_COLLECTION_MIN = 80    # Min premium to sell (INR)
@@ -40,7 +40,7 @@ TRADING_END = "15:15"          # IST - no new trades after this
 SQUARE_OFF_TIME = "15:25"      # IST - forced square off
 
 # --- Capital ---
-INITIAL_CAPITAL = 500000       # 5 Lakh starting capital
+INITIAL_CAPITAL = 300000       # ₹3 Lakh (part of ₹10L total)
 MARGIN_PER_LOT = 100000        # Approx margin for 1 lot option selling
 
 # --- Brokerage & Transaction Costs (per order) ---

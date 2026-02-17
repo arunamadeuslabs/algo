@@ -1,0 +1,18 @@
+[Unit]
+Description=Algo Paper Trading Live Dashboard
+After=network.target
+
+[Service]
+Type=simple
+User=aprabhu
+WorkingDirectory=/home/aprabhu/algo
+Environment=PYTHONIOENCODING=utf-8
+EnvironmentFile=/home/aprabhu/algo/.env
+ExecStart=/home/aprabhu/algo/.venv/bin/python3 /home/aprabhu/algo/dashboard_server.py --port 8050 --no-browser
+Restart=always
+RestartSec=5
+StandardOutput=append:/home/aprabhu/algo/dashboard.log
+StandardError=append:/home/aprabhu/algo/dashboard.log
+
+[Install]
+WantedBy=multi-user.target

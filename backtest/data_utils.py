@@ -1,15 +1,57 @@
 """
 Data utilities for fetching and preparing Nifty data.
-Supports sample data generation and CSV loading.
+Fetches real data from Dhan API via shared dhan_api module.
+Falls back to synthetic data only if API is unavailable.
 """
 
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 import os
+import sys
+
+# Add project root to path for shared dhan_api module
+_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _ROOT not in sys.path:
+    sys.path.insert(0, _ROOT)
 
 
-def generate_sample_nifty_data(days: int = 90, timeframe: str = "15min") -> pd.DataFrame:
+# ── Index metadata ──────────────────────────────────────────────────────────
+INDEX_META = {
+    "nifty":       {"name": "Nifty 50",       "lot_size": 25, "strike_step": 50,  "base_price": 22000},
+    "banknifty":   {"name": "Bank Nifty",    "lot_size": 15, "strike_step": 100, "base_price": 48000},
+    "finnifty":    {"name": "Fin Nifty",     "lot_size": 25, "strike_step": 50,  "base_price": 23000},
+    "midcapnifty": {"name": "Midcap Nifty",  "lot_size": 50, "strike_step": 25,  "base_price": 12000},
+    "sensex":      {"name": "Sensex",        "lot_size": 10, "strike_step": 100, "base_price": 72000},
+}
+
+
+def generate_sample_nifty_data(days: int = 90, timeframe: str = "5min",
+                               symbol: str = "nifty") -> pd.DataFrame:
+    """
+    Fetch real index data from Dhan API (with caching).
+    Supports 'nifty' or 'banknifty'.  Falls back to synthetic data if API fails.
+    """
+    symbol = symbol.lower()
+    if symbol not in INDEX_META:
+        raise ValueError(f"Unknown symbol '{symbol}'. Choose from: {list(INDEX_META.keys())}")
+
+    try:
+        from dhan_api import get_data, TIMEFRAME_MAP
+        cache_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
+        interval = TIMEFRAME_MAP.get(timeframe, 5)
+        df = get_data(symbol, days=days, interval=interval, cache_dir=cache_dir)
+        if not df.empty:
+            return df
+    except Exception as e:
+        print(f"  ⚠️ Dhan API failed: {e}")
+
+    print("  ⚠️ Falling back to synthetic data...")
+    return _generate_synthetic_nifty_data(days=days, timeframe=timeframe,
+                                          base_price=INDEX_META[symbol]["base_price"])
+
+
+def _generate_synthetic_nifty_data(days: int = 90, timeframe: str = "15min") -> pd.DataFrame:
     """
     Generate realistic synthetic Nifty 15-min OHLCV data for backtesting.
     Simulates trending + sideways phases with realistic volume patterns.
@@ -25,7 +67,23 @@ def generate_sample_nifty_data(days: int = 90, timeframe: str = "15min") -> pd.D
         "Daily": 1,
     }
     bars_per_day = intervals_map.get(timeframe, 25)
-    total_bars = days * bars_per_day
+
+    # Build trading days (weekdays only), ending at today — never future dates
+    end_date = datetime.now()
+    start_date = end_date - timedelta(days=int(days * 1.5) + 10)
+    current_date = start_date.replace(hour=9, minute=15, second=0, microsecond=0)
+
+    trading_days = []
+    while current_date.date() <= end_date.date():
+        if current_date.weekday() < 5:
+            trading_days.append(current_date)
+        current_date += timedelta(days=1)
+
+    # Take only the last `days` trading days (data ends at today)
+    if len(trading_days) > days:
+        trading_days = trading_days[-days:]
+
+    total_bars = len(trading_days) * bars_per_day
 
     # Start price around Nifty level
     base_price = 22000.0
@@ -46,32 +104,18 @@ def generate_sample_nifty_data(days: int = 90, timeframe: str = "15min") -> pd.D
         new_price = max(new_price, 18000)  # Floor
         prices.append(new_price)
 
-    # Generate OHLCV
-    freq_map = {"5min": "5T", "15min": "15T", "1H": "1H", "4H": "4H", "Daily": "1D"}
-    freq = freq_map.get(timeframe, "15T")
-
-    # Build trading timestamps (9:15 to 15:30 IST)
-    # Start from (today - days) so the data ends near today
+    # Build bar timestamps for each trading day
     dates = []
-    end_date = datetime.now()
-    start_date = end_date - timedelta(days=days + 10)  # extra buffer for weekends
-    current_date = start_date.replace(hour=9, minute=15, second=0, microsecond=0)
-    bar_count = 0
+    minute_offsets = {"1min": 1, "5min": 5, "15min": 15, "1H": 60, "4H": 240, "Daily": 0}
+    offset = minute_offsets[timeframe]
 
-    while bar_count < total_bars:
-        if current_date.weekday() < 5:  # Mon-Fri
-            trading_start = current_date.replace(hour=9, minute=15)
-            for j in range(bars_per_day):
-                if bar_count >= total_bars:
-                    break
-                minutes_offset = j * {"1min": 1, "5min": 5, "15min": 15, "1H": 60, "4H": 240, "Daily": 0}[timeframe]
-                bar_time = trading_start + timedelta(minutes=minutes_offset)
-                dates.append(bar_time)
-                bar_count += 1
-        current_date += timedelta(days=1)
+    for td in trading_days:
+        trading_start = td.replace(hour=9, minute=15)
+        for j in range(bars_per_day):
+            bar_time = trading_start + timedelta(minutes=j * offset)
+            dates.append(bar_time)
 
-    dates = dates[:total_bars]
-    prices = prices[:total_bars]
+    prices = prices[:len(dates)]
 
     data = []
     for i, (dt, close) in enumerate(zip(dates, prices)):

@@ -28,10 +28,9 @@ import numpy as np
 
 # Ensure ironcondor directory imports work
 IC_DIR = os.path.dirname(os.path.abspath(__file__))
+_ROOT_DIR = os.path.dirname(IC_DIR)
 sys.path.insert(0, IC_DIR)
-
-# Dhan API lives in backtest/
-BACKTEST_DIR = os.path.join(IC_DIR, '..', 'backtest')
+sys.path.insert(0, _ROOT_DIR)
 
 from config import (
     INITIAL_CAPITAL, OPTION_LOT_SIZE, NUM_LOTS,
@@ -50,15 +49,7 @@ from data_utils import (
     compute_rsi, generate_banknifty_data,
 )
 from strategy import calculate_costs, LegStatus
-
-# Import Dhan API from backtest directory
-import importlib.util
-_dhan_spec = importlib.util.spec_from_file_location("dhan_fetch", os.path.join(BACKTEST_DIR, "dhan_fetch.py"))
-_dhan_mod = importlib.util.module_from_spec(_dhan_spec)
-_dhan_spec.loader.exec_module(_dhan_mod)
-fetch_nifty_intraday = _dhan_mod.fetch_nifty_intraday
-fetch_nifty_ltp = _dhan_mod.fetch_nifty_ltp
-fetch_nifty_ohlc = _dhan_mod.fetch_nifty_ohlc
+import dhan_api
 
 # ── Constants ────────────────────────────────────────────────
 PAPER_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "paper_trades")
@@ -202,8 +193,9 @@ def append_daily(daily_data: dict):
 class IronCondorPaperTrader:
     """Manages Iron Condor paper trading lifecycle."""
 
-    def __init__(self, state: PaperState):
+    def __init__(self, state: PaperState, symbol: str = "banknifty"):
         self.state = state
+        self.symbol = symbol
         self.quantity = OPTION_LOT_SIZE * NUM_LOTS
         self.position: Optional[PaperPosition] = None
         self._running = True
@@ -256,7 +248,7 @@ class IronCondorPaperTrader:
 
             # ── Fetch current spot ──
             try:
-                spot = fetch_nifty_ltp()
+                spot = dhan_api.fetch_ltp(self.symbol)
                 if spot is None or spot <= 0:
                     time.sleep(POLL_DELAY_SEC)
                     continue
@@ -511,6 +503,9 @@ def main():
     parser.add_argument("--days", type=int, default=5, help="Simulation days (default: 5)")
     parser.add_argument("--resume", action="store_true", help="Resume from saved state")
     parser.add_argument("--reset", action="store_true", help="Reset state and start fresh")
+    parser.add_argument("--symbol", type=str, default="banknifty",
+                        choices=["nifty", "banknifty", "finnifty", "midcapnifty", "sensex"],
+                        help="Index to trade (default: banknifty)")
     args = parser.parse_args()
 
     if args.reset:
@@ -520,7 +515,7 @@ def main():
         return
 
     state = load_state() if args.resume or args.live else PaperState()
-    trader = IronCondorPaperTrader(state)
+    trader = IronCondorPaperTrader(state, symbol=args.symbol)
 
     if args.live:
         trader.run_live(resume=args.resume)

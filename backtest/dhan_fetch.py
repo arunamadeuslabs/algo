@@ -29,10 +29,19 @@ if hasattr(sys.stdout, 'reconfigure'):
 # --- Dhan API Configuration ---
 DHAN_API_BASE = "https://api.dhan.co/v2"
 
-# Load credentials from environment variables (for cloud deployment)
-# Falls back to hardcoded values for local development
-DHAN_ACCESS_TOKEN = os.environ.get("DHAN_JWT_TOKEN", "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzUxMiJ9.eyJpc3MiOiJkaGFuIiwicGFydG5lcklkIjoiIiwiZXhwIjoxNzcxMzA3MjUyLCJpYXQiOjE3NzEyMjA4NTIsInRva2VuQ29uc3VtZXJUeXBlIjoiU0VMRiIsIndlYmhvb2tVcmwiOiIiLCJkaGFuQ2xpZW50SWQiOiIxMTEwMjY5MDk5In0.3H5RmzOQW3rVP-tn6Nswcc04LI_GZ4eabzzVHiDdFZWBnJpdRJjwimEmahl-NRSSDoZK2n8tkUiGDdnrsXCHEQ")
-DHAN_CLIENT_ID = os.environ.get("DHAN_CLIENT_ID", "1110269099")
+# Load credentials from .env / environment variables — no hardcoded tokens
+try:
+    from pathlib import Path as _Path
+    from dotenv import load_dotenv
+    load_dotenv(_Path(__file__).parent.parent / ".env")
+except ImportError:
+    pass
+
+DHAN_ACCESS_TOKEN = os.environ.get("DHAN_JWT_TOKEN", "")
+DHAN_CLIENT_ID = os.environ.get("DHAN_CLIENT_ID", "")
+
+if not DHAN_ACCESS_TOKEN:
+    print("  ⚠️  DHAN_JWT_TOKEN not set — add it to .env")
 
 # --- Nifty Security IDs ---
 # Nifty 50 Index on NSE
@@ -241,16 +250,104 @@ def fetch_nifty_intraday(interval: int = 5, days_back: int = 30) -> pd.DataFrame
     
     For longer periods, data is fetched in 90-day chunks automatically.
     """
-    days_back = min(days_back, 90)  # Dhan API limit
-
     segment = SEGMENTS["nifty_index"]
-    return fetch_intraday_data(
+    return fetch_intraday_chunked(
         security_id=segment["securityId"],
         exchange_segment=segment["exchangeSegment"],
         instrument=segment["instrument"],
         interval=interval,
         days_back=days_back,
     )
+
+
+def fetch_banknifty_intraday(interval: int = 5, days_back: int = 30) -> pd.DataFrame:
+    """Fetch Bank Nifty index intraday data (chunked for >90 days)."""
+    segment = SEGMENTS["banknifty_index"]
+    return fetch_intraday_chunked(
+        security_id=segment["securityId"],
+        exchange_segment=segment["exchangeSegment"],
+        instrument=segment["instrument"],
+        interval=interval,
+        days_back=days_back,
+    )
+
+
+def fetch_banknifty_daily(days_back: int = 365) -> pd.DataFrame:
+    """Fetch Bank Nifty daily data."""
+    segment = SEGMENTS["banknifty_index"]
+    return fetch_daily_data(
+        security_id=segment["securityId"],
+        exchange_segment=segment["exchangeSegment"],
+        instrument=segment["instrument"],
+        days_back=days_back,
+    )
+
+
+def fetch_intraday_chunked(
+    security_id: str,
+    exchange_segment: str,
+    instrument: str,
+    interval: int = 5,
+    days_back: int = 365,
+) -> pd.DataFrame:
+    """
+    Fetch intraday data in 85-day chunks (Dhan limit is 90 days).
+    Automatically stitches chunks and deduplicates.
+    Includes 2-second sleep between requests to respect rate limits.
+    """
+    chunk_size = 85  # days per chunk (leave margin under 90-day limit)
+    all_dfs = []
+    end_dt = datetime.now()
+    remaining = days_back
+
+    print(f"\n  📡 Fetching {days_back} days of {interval}min data in chunks...")
+
+    chunk_num = 0
+    while remaining > 0:
+        chunk_days = min(remaining, chunk_size)
+        chunk_end = end_dt - timedelta(days=(days_back - remaining))
+        chunk_start = chunk_end - timedelta(days=chunk_days)
+
+        to_date = chunk_end.strftime("%Y-%m-%d %H:%M:%S")
+        from_date = chunk_start.strftime("%Y-%m-%d %H:%M:%S")
+
+        chunk_num += 1
+        df = fetch_intraday_data(
+            security_id=security_id,
+            exchange_segment=exchange_segment,
+            instrument=instrument,
+            interval=interval,
+            from_date=from_date,
+            to_date=to_date,
+        )
+
+        if not df.empty:
+            all_dfs.append(df)
+            print(f"     Chunk {chunk_num}: {len(df)} bars ({df.index[0].date()} to {df.index[-1].date()})")
+
+        remaining -= chunk_days
+
+        # Rate limit: sleep between API calls
+        if remaining > 0:
+            time.sleep(2)
+
+    if not all_dfs:
+        print("  ⚠️ No data fetched from any chunk")
+        return pd.DataFrame()
+
+    combined = pd.concat(all_dfs)
+    combined = combined[~combined.index.duplicated(keep='first')]
+    combined.sort_index(inplace=True)
+
+    # Filter to market hours only (9:15 - 15:30)
+    combined = combined[(combined.index.hour >= 9) & (combined.index.hour <= 15)]
+    combined = combined[~((combined.index.hour == 15) & (combined.index.minute > 30))]
+
+    trading_days = combined.index.normalize().nunique()
+    print(f"  ✅ Total: {len(combined)} bars across {trading_days} trading days")
+    print(f"     Range: {combined.index[0]} to {combined.index[-1]}")
+
+    return combined
 
 
 def fetch_nifty_daily(days_back: int = 365) -> pd.DataFrame:

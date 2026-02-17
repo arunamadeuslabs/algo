@@ -123,16 +123,25 @@ print(t)
 echo "  Total trades in tradebook: $TOTAL"
 echo ""
 
-# Start web server if not running
+# Start live dashboard server if not running
+if ! pgrep -f "dashboard_server.py" > /dev/null; then
+    nohup $PYTHON dashboard_server.py --port 8050 --no-browser >> dashboard.log 2>&1 &
+    echo "  Live dashboard started on port 8050"
+else
+    echo "  Live dashboard already running on port 8050"
+fi
+
+# Start static file server if not running
 if ! pgrep -f "http.server 8080" > /dev/null; then
     nohup python3 -m http.server 8080 > /dev/null 2>&1 &
-    echo "  Dashboard server started on port 8080"
+    echo "  Static file server started on port 8080"
 else
-    echo "  Dashboard server already running on port 8080"
+    echo "  Static file server already running on port 8080"
 fi
 
 PUBLIC_IP=$(curl -s ifconfig.me 2>/dev/null || echo "YOUR_VM_IP")
 echo ""
-echo "  Dashboard:  http://$PUBLIC_IP:8080/dashboard.html"
-echo "  Tradebook:  http://$PUBLIC_IP:8080/tradebook.html"
+echo "  Live Dashboard: http://$PUBLIC_IP:8050"
+echo "  Tradebook:      http://$PUBLIC_IP:8080/tradebook.html"
+echo "  Daily Report:   http://$PUBLIC_IP:8080/dashboard.html"
 echo ""

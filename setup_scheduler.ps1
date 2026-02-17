@@ -66,11 +66,11 @@ $xml = @"
 <?xml version="1.0" encoding="UTF-16"?>
 <Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
   <RegistrationInfo>
-    <Description>Nifty Algo Trader - Runs EMA Crossover, Sapphire, and Momentum paper trading algos Mon-Fri at market open</Description>
+    <Description>Nifty Algo Trader - Runs EMA Crossover, Sapphire, Momentum, and Iron Condor paper trading algos Mon-Fri at market open. Dashboard at http://localhost:8050</Description>
   </RegistrationInfo>
   <Triggers>
     <CalendarTrigger>
-      <StartBoundary>2026-02-17T09:10:00</StartBoundary>
+      <StartBoundary>2026-02-18T09:10:00</StartBoundary>
       <Enabled>true</Enabled>
       <ScheduleByWeek>
         <WeeksInterval>1</WeeksInterval>
@@ -146,8 +146,8 @@ Write-Host "    python launcher.py              # Start now"
 Write-Host "    python launcher.py --status     # Check status"
 Write-Host "    python launcher.py --stop       # Stop all"
 Write-Host "    python launcher.py --sapphire   # Sapphire only"
-Write-Host "    python launcher.py --ema        # EMA only"
-Write-Host "    python launcher.py --momentum   # Momentum only"
+Write-Host "    python launcher.py --ironcondor # Iron Condor only"
+Write-Host "    python dashboard_server.py     # Dashboard only"
 Write-Host ""
 Write-Host "  To remove scheduler:" -ForegroundColor Yellow
 Write-Host "    schtasks /Delete /TN `"$TaskName`" /F"

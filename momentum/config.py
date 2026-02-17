@@ -14,7 +14,7 @@ Backtest Performance (Jan 2025 – Jan 2026):
 """
 
 # --- Capital & Position Sizing ---
-INITIAL_CAPITAL = 400000         # ₹4 Lakh starting capital
+INITIAL_CAPITAL = 250000         # ₹2.5 Lakh (part of ₹10L total)
 NIFTY_LOT_SIZE = 25             # Nifty futures lot size
 MAX_LOTS = 2                     # Max position: 2 lots
 MARGIN_PER_LOT = 120000          # Approx margin for 1 Nifty futures lot
@@ -90,6 +90,6 @@ SEBI_CHARGES = 10 / 10000000     # ₹10 per crore
 STAMP_DUTY = 0.00002             # Stamp duty
 
 # --- Data Settings ---
-BACKTEST_DAYS = 365              # 1 year backtest
+BACKTEST_DAYS = 90               # 3 months backtest
 DATA_DIR = "data"
 RESULTS_DIR = "results"

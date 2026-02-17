@@ -36,7 +36,6 @@ from config import *
 from data_utils import generate_sample_nifty_data, load_csv_data, compute_indicators
 from strategy import OptionSellingBacktest
 from visualization import generate_report
-from dhan_fetch import fetch_nifty_intraday, fetch_nifty_daily, save_data_to_csv
 
 
 def _save_trade_csv(result):
@@ -79,10 +78,11 @@ def main():
         description="Nifty Option Selling Backtest - EMA Crossover Strategy"
     )
     parser.add_argument("--csv", type=str, help="Path to CSV file with OHLCV data")
-    parser.add_argument("--dhan", action="store_true",
-                        help="Fetch real data from Dhan API")
-    parser.add_argument("--days", type=int, default=30,
-                        help="Days of data (default: 30, max 90 for intraday)")
+    parser.add_argument("--days", type=int, default=90,
+                        help="Days of data (default: 90)")
+    parser.add_argument("--symbol", type=str, default="nifty",
+                        choices=["nifty", "banknifty", "finnifty", "midcapnifty", "sensex"],
+                        help="Index to trade (default: nifty)")
     parser.add_argument("--capital", type=float, default=INITIAL_CAPITAL,
                         help=f"Starting capital (default: {INITIAL_CAPITAL})")
     parser.add_argument("--timeframe", type=str, default=TIMEFRAME,
@@ -95,40 +95,23 @@ def main():
     parser.add_argument("--no-charts", action="store_true", help="Skip chart generation")
 
     args = parser.parse_args()
+    _SYM_LABELS = {"nifty": "NIFTY", "banknifty": "BANK NIFTY", "finnifty": "FIN NIFTY",
+                   "midcapnifty": "MIDCAP NIFTY", "sensex": "SENSEX"}
+    sym_label = _SYM_LABELS.get(args.symbol, args.symbol.upper())
 
     print("\n" + "=" * 60)
-    print("  🚀 NIFTY OPTION SELLING BACKTEST ENGINE")
+    print(f"  🚀 {sym_label} OPTION SELLING BACKTEST ENGINE")
     print("  Strategy: EMA Crossover + Plus Sign System")
     print("=" * 60)
 
-    # --- Load Data ---
-    if args.dhan:
-        # Fetch real data from Dhan API
-        interval_map = {"1min": 1, "5min": 5, "15min": 15, "1H": 60, "4H": 60, "Daily": 0}
-        interval = interval_map.get(args.timeframe, 5)
-
-        if args.timeframe == "Daily":
-            print(f"\n📡 Fetching real Nifty DAILY data from Dhan API ({args.days} days)...")
-            data = fetch_nifty_daily(days_back=args.days)
-        else:
-            days = min(args.days, 90)  # Dhan intraday limit
-            print(f"\n📡 Fetching real Nifty {args.timeframe} data from Dhan API ({days} days)...")
-            data = fetch_nifty_intraday(interval=interval, days_back=days)
-
-        if data.empty:
-            print("\n  ❌ No data from Dhan API. Falling back to sample data.")
-            data = generate_sample_nifty_data(days=args.days, timeframe=args.timeframe)
-        else:
-            # Save fetched data for future use
-            csv_name = f"nifty_{args.timeframe}_{args.days}d_dhan.csv"
-            save_data_to_csv(data, csv_name)
-
-    elif args.csv:
+    # --- Load Data (real Dhan API data by default) ---
+    if args.csv:
         print(f"\n📂 Loading data from: {args.csv}")
         data = load_csv_data(args.csv)
     else:
-        print(f"\n📊 Generating {args.days} days of sample Nifty data ({args.timeframe})...")
-        data = generate_sample_nifty_data(days=args.days, timeframe=args.timeframe)
+        print(f"\n📊 Loading {args.days} days of {sym_label} data ({args.timeframe})...")
+        data = generate_sample_nifty_data(days=args.days, timeframe=args.timeframe,
+                                          symbol=args.symbol)
 
     print(f"   Bars loaded: {len(data)}")
     print(f"   Date range: {data.index[0]} → {data.index[-1]}")

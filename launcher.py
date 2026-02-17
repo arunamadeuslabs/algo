@@ -54,28 +54,28 @@ ALGOS = {
     "ema": {
         "name": "EMA Crossover Paper Trader",
         "script": str(BACKTEST_DIR / "paper_trading.py"),
-        "args": ["--live"],
+        "args": ["--live", "--symbol", "sensex"],
         "cwd": str(BACKTEST_DIR),
         "log": str(BACKTEST_DIR / "paper_trades" / "paper_trading.log"),
     },
     "sapphire": {
         "name": "Sapphire Short Strangle",
         "script": str(SAPPHIRE_DIR / "paper_trading.py"),
-        "args": ["--live"],
+        "args": ["--live", "--symbol", "nifty"],
         "cwd": str(SAPPHIRE_DIR),
         "log": str(SAPPHIRE_DIR / "paper_trades" / "sapphire_paper.log"),
     },
     "momentum": {
         "name": "Momentum Dual Confirmation",
         "script": str(MOMENTUM_DIR / "paper_trading.py"),
-        "args": ["--live"],
+        "args": ["--live", "--symbol", "nifty"],
         "cwd": str(MOMENTUM_DIR),
         "log": str(MOMENTUM_DIR / "paper_trades" / "momentum_paper.log"),
     },
     "ironcondor": {
-        "name": "Iron Condor (Bank Nifty)",
+        "name": "Iron Condor (Sensex)",
         "script": str(IRONCONDOR_DIR / "paper_trading.py"),
-        "args": ["--live"],
+        "args": ["--live", "--symbol", "sensex"],
         "cwd": str(IRONCONDOR_DIR),
         "log": str(IRONCONDOR_DIR / "paper_trades" / "ic_paper.log"),
     },
@@ -233,6 +233,23 @@ def run(algo_keys: list):
         proc = start_algo(key)
         processes[key] = proc
         pids[key] = proc.pid
+
+    # Start dashboard server
+    dashboard_script = str(BASE_DIR / "dashboard_server.py")
+    if os.path.exists(dashboard_script):
+        log.info("  Starting dashboard server on port 8050...")
+        dash_cmd = [PYTHON, dashboard_script, "--no-browser", "--port", "8050"]
+        dash_kwargs = dict(
+            cwd=str(BASE_DIR),
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        if sys.platform == "win32":
+            dash_kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
+        dash_proc = subprocess.Popen(dash_cmd, **dash_kwargs)
+        processes["dashboard"] = dash_proc
+        pids["dashboard"] = dash_proc.pid
+        log.info(f"    Dashboard PID: {dash_proc.pid} — http://localhost:8050")
 
     save_pids(pids)
     desktop_notify("Algos Started", f"Running: {', '.join(algo_keys)}")

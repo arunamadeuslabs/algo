@@ -36,12 +36,15 @@ from typing import Optional, List
 import pandas as pd
 import numpy as np
 
-# Add backtest directory to path
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+# Add backtest directory + root to path
+_BACKTEST_DIR = os.path.dirname(os.path.abspath(__file__))
+_ROOT_DIR = os.path.dirname(_BACKTEST_DIR)
+sys.path.insert(0, _BACKTEST_DIR)
+sys.path.insert(0, _ROOT_DIR)
 
 from config import *
 from data_utils import compute_indicators, get_atm_strike, estimate_option_premium, generate_sample_nifty_data
-from dhan_fetch import fetch_nifty_intraday, fetch_nifty_ltp, fetch_nifty_ohlc
+import dhan_api
 from strategy import (
     Signal, TradeStatus, Trade, calculate_transaction_costs,
 )
@@ -121,12 +124,13 @@ class PaperTradingEngine:
 
     def __init__(self, interval: int = 5, capital: float = INITIAL_CAPITAL,
                  fast_ema: int = FAST_EMA_PERIOD, slow_ema: int = SLOW_EMA_PERIOD,
-                 resume: bool = False):
+                 resume: bool = False, symbol: str = "nifty"):
         self.interval = interval            # Candle interval in minutes
         self.initial_capital = capital
         self.capital = capital
         self.fast_ema = fast_ema
         self.slow_ema = slow_ema
+        self.symbol = symbol
 
         self.current_trade: Optional[PaperTrade] = None
         self.closed_trades: List[PaperTrade] = []
@@ -380,7 +384,7 @@ class PaperTradingEngine:
         days_back = max(5, (WARMUP_CANDLES * self.interval) // (375) + 3)
         days_back = min(days_back, 90)
 
-        df = fetch_nifty_intraday(interval=self.interval, days_back=days_back)
+        df = dhan_api.fetch_intraday(self.symbol, interval=self.interval, days_back=days_back)
 
         if df.empty:
             return pd.DataFrame()
@@ -792,7 +796,7 @@ class PaperTradingEngine:
 # ── CLI Entry Point ──────────────────────────────────────────
 def main():
     parser = argparse.ArgumentParser(
-        description="Nifty Paper Trading — EMA Crossover Option Selling"
+        description="Paper Trading — EMA Crossover Option Selling"
     )
     parser.add_argument("--interval", type=int, default=5, choices=[1, 5, 15],
                         help="Candle interval in minutes (default: 5)")
@@ -810,6 +814,9 @@ def main():
                         help="Run live paper trading with Dhan API data")
     parser.add_argument("--days", type=int, default=5,
                         help="Days of data for simulation mode (default: 5)")
+    parser.add_argument("--symbol", type=str, default="nifty",
+                        choices=["nifty", "banknifty", "finnifty", "midcapnifty", "sensex"],
+                        help="Index to trade (default: nifty)")
 
     args = parser.parse_args()
 
@@ -819,12 +826,13 @@ def main():
         fast_ema=args.fast_ema,
         slow_ema=args.slow_ema,
         resume=args.resume,
+        symbol=args.symbol,
     )
 
     if args.simulate:
         # One-shot simulation using Dhan API data (fallback to sample data)
         print(f"\n📊 Running paper trading simulation ({args.days} days, {args.interval}min candles)...")
-        df = fetch_nifty_intraday(interval=args.interval, days_back=args.days)
+        df = dhan_api.fetch_intraday(args.symbol, interval=args.interval, days_back=args.days)
         if df.empty:
             print("  ⚠️  Dhan API unavailable — using sample data for simulation")
             timeframe_map = {1: "1min", 5: "5min", 15: "15min"}
@@ -834,7 +842,7 @@ def main():
     elif args.live:
         # Live paper trading with Dhan API
         print(f"\n🔴 LIVE PAPER TRADING MODE")
-        print(f"   Data Source: Dhan API")
+        print(f"   Data Source: Dhan API ({args.symbol})")
         print(f"   Interval: {args.interval}min")
         print(f"   Capital: ₹{args.capital:,.0f}")
         print(f"   Press Ctrl+C to stop\n")

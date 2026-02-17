@@ -2,11 +2,24 @@
 import requests
 import json
 import base64
+import os
 from datetime import datetime
+from pathlib import Path
+
+# Load credentials from .env — no hardcoded tokens
+try:
+    from dotenv import load_dotenv
+    load_dotenv(Path(__file__).parent.parent / ".env")
+except ImportError:
+    pass
 
 BASE = "https://api.dhan.co/v2"
-TOKEN = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzUxMiJ9.eyJpc3MiOiJkaGFuIiwicGFydG5lcklkIjoiIiwiZXhwIjoxNzcxMzA3MjUyLCJpYXQiOjE3NzEyMjA4NTIsInRva2VuQ29uc3VtZXJUeXBlIjoiU0VMRiIsIndlYmhvb2tVcmwiOiIiLCJkaGFuQ2xpZW50SWQiOiIxMTEwMjY5MDk5In0.3H5RmzOQW3rVP-tn6Nswcc04LI_GZ4eabzzVHiDdFZWBnJpdRJjwimEmahl-NRSSDoZK2n8tkUiGDdnrsXCHEQ"
-CLIENT = "1110269099"
+TOKEN = os.environ.get("DHAN_JWT_TOKEN", "")
+CLIENT = os.environ.get("DHAN_CLIENT_ID", "")
+
+if not TOKEN:
+    print("❌ DHAN_JWT_TOKEN not set — add it to .env file")
+    exit(1)
 
 headers = {
     "Content-Type": "application/json",

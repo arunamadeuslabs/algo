@@ -33,6 +33,12 @@ tradebook.html
 # Log files
 *.log
 
+# Cached market data
+backtest/data/
+sapphire/data/
+momentum/data/
+ironcondor/data/
+
 # OS files
 Thumbs.db
 .DS_Store
