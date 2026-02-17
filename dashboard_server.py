@@ -536,7 +536,7 @@ startRefreshBar();
 # ── Main ─────────────────────────────────────────────────────
 def main():
     parser = argparse.ArgumentParser(description="Live Paper Trading Dashboard")
-    parser.add_argument("--port", type=int, default=8080, help="Port (default: 8080)")
+    parser.add_argument("--port", type=int, default=8050, help="Port (default: 8050)")
     parser.add_argument("--no-browser", action="store_true", help="Don't open browser")
     args = parser.parse_args()
 

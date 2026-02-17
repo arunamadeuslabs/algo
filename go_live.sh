@@ -196,14 +196,14 @@ pkill -f "dashboard_server.py" 2>/dev/null && echo "  Stopped old dashboard" || 
 pkill -f "http.server 8080" 2>/dev/null && echo "  Stopped old static server" || true
 sleep 1
 
-# Start live dashboard on port 8080 (serves everything: dashboard + tradebook + API)
-nohup $PYTHON $DASHBOARD --port 8080 --no-browser >> dashboard.log 2>&1 &
+# Start live dashboard on port 8050 (serves everything: dashboard + tradebook + API)
+nohup $PYTHON $DASHBOARD --port 8050 --no-browser >> dashboard.log 2>&1 &
 DASH_PID=$!
-ok "Live dashboard started (PID $DASH_PID, port 8080)"
+ok "Live dashboard started (PID $DASH_PID, port 8050)"
 
 # Quick test
 sleep 2
-if curl -s http://localhost:8080/api/data > /dev/null 2>&1; then
+if curl -s http://localhost:8050/api/data > /dev/null 2>&1; then
     ok "Dashboard API responding"
 else
     warn "Dashboard API not responding yet (may need a moment)"
@@ -223,7 +223,7 @@ DASHBOARD_LOG="$ALGO_DIR/dashboard.log"
 # Cron entries
 CRON_LAUNCHER="10 9 * * 1-5 cd $ALGO_DIR && export PYTHONIOENCODING=utf-8 && export \$(grep -v '^\#' $ALGO_DIR/.env | xargs) && $PYTHON $LAUNCHER >> $LOGFILE 2>&1"
 CRON_REPORT="40 15 * * 1-5 cd $ALGO_DIR && export PYTHONIOENCODING=utf-8 && export \$(grep -v '^\#' $ALGO_DIR/.env | xargs) && $PYTHON $REPORT >> $REPORT_LOG 2>&1"
-CRON_REBOOT="@reboot sleep 30 && cd $ALGO_DIR && export \$(grep -v '^\#' $ALGO_DIR/.env | xargs) && $PYTHON $DASHBOARD --port 8080 --no-browser >> $DASHBOARD_LOG 2>&1 &"
+CRON_REBOOT="@reboot sleep 30 && cd $ALGO_DIR && export \$(grep -v '^\#' $ALGO_DIR/.env | xargs) && $PYTHON $DASHBOARD --port 8050 --no-browser >> $DASHBOARD_LOG 2>&1 &"
 
 # Install (replace old entries)
 (crontab -l 2>/dev/null | grep -v "launcher.py" | grep -v "daily_report.py" | grep -v "http.server" | grep -v "dashboard_server.py" ; echo "$CRON_LAUNCHER" ; echo "$CRON_REPORT" ; echo "$CRON_REBOOT") | crontab -
@@ -253,10 +253,10 @@ echo "    03:40 PM  → Daily report emailed"
 echo "    24/7      → Dashboard always on"
 echo ""
 echo "  URLs:"
-echo "    Live Dashboard: http://$PUBLIC_IP:8080"
-echo "    Tradebook:      http://$PUBLIC_IP:8080/tradebook.html"
-echo "    Daily Report:   http://$PUBLIC_IP:8080/dashboard.html"
-echo "    API:            http://$PUBLIC_IP:8080/api/data"
+echo "    Live Dashboard: http://$PUBLIC_IP:8050"
+echo "    Tradebook:      http://$PUBLIC_IP:8050/tradebook.html"
+echo "    Daily Report:   http://$PUBLIC_IP:8050/dashboard.html"
+echo "    API:            http://$PUBLIC_IP:8050/api/data"
 echo ""
 echo "  Commands:"
 echo "    bash go_live.sh --status    # Check status"
