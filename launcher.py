@@ -1,7 +1,7 @@
 """
 Algo Auto-Launcher
 ===================
-Starts all trading algos (EMA Crossover + Sapphire Strangle + Momentum) automatically.
+Starts all trading algos (EMA Crossover + Sapphire Strangle + Momentum + Supertrend VWAP) automatically.
 Designed to be scheduled via Windows Task Scheduler at 09:10 AM Mon-Fri.
 
 Features:
@@ -16,6 +16,7 @@ Usage:
   python launcher.py --sapphire       # Sapphire only
   python launcher.py --ema            # EMA crossover only
   python launcher.py --momentum       # Momentum only
+  python launcher.py --supertrend     # Supertrend VWAP only
   python launcher.py --status         # Check if algos are running
   python launcher.py --stop           # Stop all algos
 """
@@ -43,6 +44,7 @@ BASE_DIR = Path(os.path.dirname(os.path.abspath(__file__)))
 BACKTEST_DIR = BASE_DIR / "backtest"
 SAPPHIRE_DIR = BASE_DIR / "sapphire"
 MOMENTUM_DIR = BASE_DIR / "momentum"
+SUPERTREND_DIR = BASE_DIR / "supertrend"
 PYTHON = sys.executable
 
 PID_FILE = BASE_DIR / ".algo_pids.json"
@@ -70,6 +72,13 @@ ALGOS = {
         "args": ["--live"],
         "cwd": str(MOMENTUM_DIR),
         "log": str(MOMENTUM_DIR / "paper_trades" / "momentum_paper.log"),
+    },
+    "supertrend": {
+        "name": "Supertrend VWAP Scalping",
+        "script": str(SUPERTREND_DIR / "paper_trading.py"),
+        "args": ["--live"],
+        "cwd": str(SUPERTREND_DIR),
+        "log": str(SUPERTREND_DIR / "paper_trades" / "supertrend_paper.log"),
     },
 }
 
@@ -356,6 +365,7 @@ if __name__ == "__main__":
     parser.add_argument("--ema", action="store_true", help="Run EMA crossover only")
     parser.add_argument("--sapphire", action="store_true", help="Run Sapphire only")
     parser.add_argument("--momentum", action="store_true", help="Run Momentum only")
+    parser.add_argument("--supertrend", action="store_true", help="Run Supertrend VWAP only")
     parser.add_argument("--status", action="store_true", help="Check running algos")
     parser.add_argument("--stop", action="store_true", help="Stop all algos")
 
@@ -374,7 +384,9 @@ if __name__ == "__main__":
             keys.append("sapphire")
         if args.momentum:
             keys.append("momentum")
+        if args.supertrend:
+            keys.append("supertrend")
         if not keys:
-            keys = ["ema", "sapphire", "momentum"]  # Default: all three
+            keys = ["ema", "sapphire", "momentum", "supertrend"]  # Default: all four
 
         run(keys)

@@ -38,6 +38,7 @@ BASE_DIR = Path(os.path.dirname(os.path.abspath(__file__)))
 BACKTEST_DIR = BASE_DIR / "backtest"
 SAPPHIRE_DIR = BASE_DIR / "sapphire"
 MOMENTUM_DIR = BASE_DIR / "momentum"
+SUPERTREND_DIR = BASE_DIR / "supertrend"
 DASHBOARD_FILE = BASE_DIR / "dashboard.html"
 
 # Trade log paths
@@ -52,6 +53,10 @@ SAPPHIRE_STATE = SAPPHIRE_DIR / "paper_trades" / "sapphire_state.json"
 MOMENTUM_TRADE_LOG = MOMENTUM_DIR / "paper_trades" / "momentum_trade_log.csv"
 MOMENTUM_DAILY_LOG = MOMENTUM_DIR / "paper_trades" / "momentum_daily_summary.csv"
 MOMENTUM_STATE = MOMENTUM_DIR / "paper_trades" / "momentum_state.json"
+
+SUPERTREND_TRADE_LOG = SUPERTREND_DIR / "paper_trades" / "supertrend_trade_log.csv"
+SUPERTREND_DAILY_LOG = SUPERTREND_DIR / "paper_trades" / "supertrend_daily_summary.csv"
+SUPERTREND_STATE = SUPERTREND_DIR / "paper_trades" / "supertrend_state.json"
 
 # Load .env
 try:
@@ -124,7 +129,7 @@ def generate_report() -> dict:
     report = {
         "date": get_today_str(),
         "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "ema": {}, "sapphire": {}, "momentum": {},
+        "ema": {}, "sapphire": {}, "momentum": {}, "supertrend": {},
     }
 
     # EMA Crossover
@@ -166,22 +171,37 @@ def generate_report() -> dict:
         "today_trades_detail": mom_today.to_dict("records") if not mom_today.empty else [],
     }
 
+    # Supertrend VWAP Scalping
+    st_all = load_trades(SUPERTREND_TRADE_LOG)
+    st_state = load_state(SUPERTREND_STATE)
+    st_today = filter_today(st_all, "date") if not st_all.empty else pd.DataFrame()
+    report["supertrend"] = {
+        "today": calc_stats(st_today),
+        "all_time": calc_stats(st_all),
+        "capital": st_state.get("capital", 300000),
+        "initial_capital": st_state.get("initial_capital", 300000),
+        "total_trades": len(st_all),
+        "today_trades_detail": st_today.to_dict("records") if not st_today.empty else [],
+    }
+
     # Combined
     ema_cap = report["ema"]["capital"]
     sap_cap = report["sapphire"]["capital"]
     mom_cap = report["momentum"]["capital"]
+    st_cap = report["supertrend"]["capital"]
     ema_init = report["ema"]["initial_capital"]
     sap_init = report["sapphire"]["initial_capital"]
     mom_init = report["momentum"]["initial_capital"]
-    total_cap = ema_cap + sap_cap + mom_cap
-    total_init = ema_init + sap_init + mom_init
+    st_init = report["supertrend"]["initial_capital"]
+    total_cap = ema_cap + sap_cap + mom_cap + st_cap
+    total_init = ema_init + sap_init + mom_init + st_init
     report["combined"] = {
         "total_capital": round(total_cap, 2),
         "initial_capital": round(total_init, 2),
         "total_return": round(total_cap - total_init, 2),
         "total_return_pct": round((total_cap / total_init - 1) * 100, 2) if total_init > 0 else 0,
-        "today_pnl": round(report["ema"]["today"]["total_pnl"] + report["sapphire"]["today"]["total_pnl"] + report["momentum"]["today"]["total_pnl"], 2),
-        "today_trades": report["ema"]["today"]["trades"] + report["sapphire"]["today"]["trades"] + report["momentum"]["today"]["trades"],
+        "today_pnl": round(report["ema"]["today"]["total_pnl"] + report["sapphire"]["today"]["total_pnl"] + report["momentum"]["today"]["total_pnl"] + report["supertrend"]["today"]["total_pnl"], 2),
+        "today_trades": report["ema"]["today"]["trades"] + report["sapphire"]["today"]["trades"] + report["momentum"]["today"]["trades"] + report["supertrend"]["today"]["trades"],
     }
     return report
 
@@ -204,6 +224,7 @@ def generate_dashboard(report: dict) -> str:
     ema = report["ema"]
     sap = report["sapphire"]
     mom = report["momentum"]
+    st = report["supertrend"]
     comb = report["combined"]
 
     ema_rows = ""
@@ -222,8 +243,13 @@ def generate_dashboard(report: dict) -> str:
         partial = "Yes" if t.get("partial_exited", False) else "No"
         mom_rows += f'<tr><td>{t.get("date","N/A")}</td><td>{t.get("direction","N/A")}</td><td>{t.get("entry_price","N/A")}</td><td>{t.get("exit_price","N/A")}</td><td>{partial}</td><td style="color:{pnl_color(pnl)};font-weight:bold">{format_inr(pnl)}</td><td>{t.get("status","N/A")}</td></tr>'
 
+    st_rows = ""
+    for t in st.get("today_trades_detail", []):
+        pnl = t.get("net_pnl", 0)
+        st_rows += f'<tr><td>{t.get("date","N/A")}</td><td>{t.get("direction","N/A")}</td><td>{t.get("entry_price","N/A")}</td><td>{t.get("exit_price","N/A")}</td><td style="color:{pnl_color(pnl)};font-weight:bold">{format_inr(pnl)}</td><td>{t.get("status","N/A")}</td></tr>'
+
     daily_chart_data = []
-    for log_path, label in [(EMA_DAILY_LOG, "EMA"), (SAPPHIRE_DAILY_LOG, "Sapphire"), (MOMENTUM_DAILY_LOG, "Momentum")]:
+    for log_path, label in [(EMA_DAILY_LOG, "EMA"), (SAPPHIRE_DAILY_LOG, "Sapphire"), (MOMENTUM_DAILY_LOG, "Momentum"), (SUPERTREND_DAILY_LOG, "Supertrend")]:
         if log_path.exists():
             try:
                 df = pd.read_csv(log_path)
@@ -324,6 +350,16 @@ tr:hover{{background:#1c2128}}
 <div class="stat-item"><div class="label">All-Time P&amp;L</div><div class="val" style="color:{pnl_color(mom["all_time"]["total_pnl"])}">{format_inr(mom["all_time"]["total_pnl"])}</div></div>
 <div class="stat-item"><div class="label">Avg Trade</div><div class="val" style="color:{pnl_color(mom["all_time"]["avg_pnl"])}">{format_inr(mom["all_time"]["avg_pnl"])}</div></div>
 </div></div>
+<div class="section" style="margin-bottom:0">
+<h2>🎯 Supertrend VWAP Scalping</h2>
+<div class="stat-grid">
+<div class="stat-item"><div class="label">Capital</div><div class="val">₹{st["capital"]:,.0f}</div></div>
+<div class="stat-item"><div class="label">Today P&amp;L</div><div class="val" style="color:{pnl_color(st["today"]["total_pnl"])}">{format_inr(st["today"]["total_pnl"])}</div></div>
+<div class="stat-item"><div class="label">Total Trades</div><div class="val">{st["total_trades"]}</div></div>
+<div class="stat-item"><div class="label">Win Rate</div><div class="val">{st["all_time"]["win_rate"]}%</div></div>
+<div class="stat-item"><div class="label">All-Time P&amp;L</div><div class="val" style="color:{pnl_color(st["all_time"]["total_pnl"])}">{format_inr(st["all_time"]["total_pnl"])}</div></div>
+<div class="stat-item"><div class="label">Avg Trade</div><div class="val" style="color:{pnl_color(st["all_time"]["avg_pnl"])}">{format_inr(st["all_time"]["avg_pnl"])}</div></div>
+</div></div>
 </div>
 <div class="section">
 <h2>Today's Trades - EMA Crossover</h2>
@@ -336,6 +372,10 @@ tr:hover{{background:#1c2128}}
 <div class="section">
 <h2>Today's Trades - Momentum</h2>
 {"<table><tr><th>Date</th><th>Direction</th><th>Entry</th><th>Exit</th><th>Partial</th><th>P&L</th><th>Status</th></tr>" + mom_rows + "</table>" if mom_rows else '<p style="color:#8b949e;text-align:center;padding:20px">No trades today</p>'}
+</div>
+<div class="section">
+<h2>Today's Trades - Supertrend VWAP</h2>
+{"<table><tr><th>Date</th><th>Direction</th><th>Entry</th><th>Exit</th><th>P&L</th><th>Status</th></tr>" + st_rows + "</table>" if st_rows else '<p style="color:#8b949e;text-align:center;padding:20px">No trades today</p>'}
 </div>
 <div class="section">
 <h2>Recent Daily P&amp;L</h2>
@@ -351,6 +391,7 @@ def generate_email_body(report: dict) -> str:
     ema = report["ema"]
     sap = report["sapphire"]
     mom = report["momentum"]
+    st = report["supertrend"]
     comb = report["combined"]
     def clr(val):
         return "#00c853" if val > 0 else "#ff1744" if val < 0 else "#888888"
@@ -407,6 +448,16 @@ def generate_email_body(report: dict) -> str:
                 <tr><td style="color:#888;padding:4px 0">Capital</td><td style="text-align:right">₹{mom["capital"]:,.0f}</td></tr>
                 <tr><td style="color:#888;padding:4px 0">All-Time Win Rate</td><td style="text-align:right">{mom["all_time"]["win_rate"]}% ({mom["total_trades"]} trades)</td></tr>
                 <tr><td style="color:#888;padding:4px 0">All-Time P&amp;L</td><td style="text-align:right;color:{clr(mom["all_time"]["total_pnl"])};font-weight:bold">₹{mom["all_time"]["total_pnl"]:+,.2f}</td></tr>
+            </table>
+        </div>
+        <div style="background:#16213e;border-radius:8px;padding:16px;margin-bottom:12px">
+            <h3 style="color:#14b8a6;margin-bottom:8px;font-size:14px">🎯 Supertrend VWAP Scalping</h3>
+            <table style="width:100%;font-size:13px">
+                <tr><td style="color:#888;padding:4px 0">Today P&amp;L</td><td style="text-align:right;color:{clr(st["today"]["total_pnl"])};font-weight:bold">₹{st["today"]["total_pnl"]:+,.2f}</td></tr>
+                <tr><td style="color:#888;padding:4px 0">Today Trades</td><td style="text-align:right">{st["today"]["trades"]} ({st["today"]["wins"]}W / {st["today"]["losses"]}L)</td></tr>
+                <tr><td style="color:#888;padding:4px 0">Capital</td><td style="text-align:right">₹{st["capital"]:,.0f}</td></tr>
+                <tr><td style="color:#888;padding:4px 0">All-Time Win Rate</td><td style="text-align:right">{st["all_time"]["win_rate"]}% ({st["total_trades"]} trades)</td></tr>
+                <tr><td style="color:#888;padding:4px 0">All-Time P&amp;L</td><td style="text-align:right;color:{clr(st["all_time"]["total_pnl"])};font-weight:bold">₹{st["all_time"]["total_pnl"]:+,.2f}</td></tr>
             </table>
         </div>
         <hr style="border:1px solid #333;margin:16px 0">
