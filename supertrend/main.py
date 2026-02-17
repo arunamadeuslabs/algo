@@ -30,6 +30,39 @@ from visualization import (
 )
 
 
+def _save_trade_csv(result):
+    """Save backtest trades to paper_trades CSV for tradebook."""
+    import pandas as pd
+    save_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "paper_trades")
+    os.makedirs(save_dir, exist_ok=True)
+    csv_path = os.path.join(save_dir, "supertrend_trade_log.csv")
+    rows = []
+    for i, t in enumerate(result.trades):
+        date_val = t.entry_time.date() if hasattr(t.entry_time, 'date') and callable(t.entry_time.date) else str(t.entry_time)[:10]
+        rows.append({
+            "trade_id": i + 1,
+            "date": str(date_val),
+            "direction": t.direction.name,
+            "entry_price": round(t.entry_price, 2),
+            "exit_price": round(t.exit_price, 2),
+            "lots": t.lots,
+            "sl_price": round(t.sl_price, 2),
+            "target_price": round(t.target_price, 2),
+            "gross_pnl": round(t.gross_pnl, 2),
+            "costs": round(t.costs, 2),
+            "net_pnl": round(t.net_pnl, 2),
+            "status": t.status.value,
+            "entry_supertrend": round(t.entry_supertrend, 2),
+            "entry_vwap": round(t.entry_vwap, 2),
+            "entry_ema": round(t.entry_ema, 2),
+            "max_favorable": round(t.max_favorable, 2),
+            "quantity": t.quantity,
+            "capital": 0,
+        })
+    pd.DataFrame(rows).to_csv(csv_path, index=False)
+    print(f"\n  Trade log saved: {csv_path} ({len(rows)} trades)")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="🎯 Nifty Supertrend + VWAP Scalping Backtest"
@@ -72,6 +105,9 @@ def main():
     # ── Run Backtest ──
     engine = SupertrendBacktest()
     result = engine.run(df)
+
+    # ── Save trade log CSV ──
+    _save_trade_csv(result)
 
     elapsed = time.time() - start_time
 

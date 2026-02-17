@@ -29,6 +29,38 @@ from visualization import (
 )
 
 
+def _save_trade_csv(result):
+    """Save backtest trades to paper_trades CSV for tradebook."""
+    import pandas as pd
+    save_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "paper_trades")
+    os.makedirs(save_dir, exist_ok=True)
+    csv_path = os.path.join(save_dir, "sapphire_trade_log.csv")
+    rows = []
+    for i, t in enumerate(result.trades):
+        date_val = t.date.date() if hasattr(t.date, 'date') and callable(t.date.date) else t.date
+        rows.append({
+            "trade_id": i + 1,
+            "date": str(date_val),
+            "entry_spot": round(t.entry_spot, 2),
+            "exit_spot": round(t.spot_at_exit, 2) if t.spot_at_exit else 0,
+            "ce_strike": t.ce_leg.strike if t.ce_leg else 0,
+            "pe_strike": t.pe_leg.strike if t.pe_leg else 0,
+            "ce_entry_prem": round(t.ce_leg.entry_premium, 2) if t.ce_leg else 0,
+            "pe_entry_prem": round(t.pe_leg.entry_premium, 2) if t.pe_leg else 0,
+            "ce_exit_prem": round(t.ce_leg.exit_premium, 2) if t.ce_leg else 0,
+            "pe_exit_prem": round(t.pe_leg.exit_premium, 2) if t.pe_leg else 0,
+            "gross_pnl": round(t.gross_pnl, 2),
+            "costs": round(t.total_costs, 2),
+            "net_pnl": round(t.net_pnl, 2),
+            "exit_reason": t.exit_reason,
+            "ce_status": t.ce_leg.status.value if t.ce_leg else "",
+            "pe_status": t.pe_leg.status.value if t.pe_leg else "",
+            "capital": 0,
+        })
+    pd.DataFrame(rows).to_csv(csv_path, index=False)
+    print(f"\n  Trade log saved: {csv_path} ({len(rows)} trades)")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="💎 Nifty Sapphire Intraday Short Strangle Backtest"
@@ -71,6 +103,9 @@ def main():
     # ── Run Backtest ──
     engine = SapphireBacktest()
     result = engine.run(df)
+
+    # ── Save trade log CSV ──
+    _save_trade_csv(result)
     
     elapsed = time.time() - start_time
     

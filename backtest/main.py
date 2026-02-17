@@ -39,6 +39,41 @@ from visualization import generate_report
 from dhan_fetch import fetch_nifty_intraday, fetch_nifty_daily, save_data_to_csv
 
 
+def _save_trade_csv(result):
+    """Save backtest trades to paper_trades CSV for tradebook."""
+    import pandas as pd
+    save_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "paper_trades")
+    os.makedirs(save_dir, exist_ok=True)
+    csv_path = os.path.join(save_dir, "paper_trade_log.csv")
+    rows = []
+    for i, t in enumerate(result.trades):
+        rows.append({
+            "id": i + 1,
+            "entry_time": str(t.entry_time),
+            "direction": t.direction.name,
+            "option_type": t.option_type,
+            "strike": t.strike,
+            "entry_spot": round(t.entry_spot, 2),
+            "entry_premium": round(t.entry_premium, 2),
+            "sl_premium": round(t.sl_premium, 2),
+            "target_premium": round(t.target_premium, 2),
+            "sl_spot": round(t.sl_spot, 2),
+            "target_spot": round(t.target_spot, 2),
+            "lots": t.lots,
+            "status": t.status.value,
+            "exit_time": str(t.exit_time) if t.exit_time else "",
+            "exit_spot": round(t.exit_spot, 2),
+            "exit_premium": round(t.exit_premium, 2),
+            "gross_pnl": round(t.gross_pnl, 2),
+            "costs": round(t.total_costs, 2),
+            "net_pnl": round(t.pnl, 2),
+            "max_favorable": round(t.max_favorable, 2),
+            "quantity": t.quantity,
+        })
+    pd.DataFrame(rows).to_csv(csv_path, index=False)
+    print(f"\n  Trade log saved: {csv_path} ({len(rows)} trades)")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Nifty Option Selling Backtest - EMA Crossover Strategy"
@@ -113,6 +148,9 @@ def main():
     print(f"\n⚡ Running backtest...")
     engine = OptionSellingBacktest(data, capital=args.capital)
     result = engine.run()
+
+    # --- Save trade log CSV ---
+    _save_trade_csv(result)
 
     # --- Generate Report ---
     if not args.no_charts:

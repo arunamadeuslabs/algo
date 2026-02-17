@@ -40,6 +40,16 @@ def compute_supertrend(df: pd.DataFrame, period: int = 10,
     direction = pd.Series(index=df.index, dtype=int)
 
     for i in range(1, len(df)):
+        # Skip if current basic bands are NaN (ATR not ready)
+        if pd.isna(basic_upper.iloc[i]):
+            continue
+
+        # Initialize from basic bands if previous was NaN
+        if pd.isna(final_upper.iloc[i - 1]):
+            final_upper.iloc[i] = basic_upper.iloc[i]
+            final_lower.iloc[i] = basic_lower.iloc[i]
+            continue
+
         # Final Upper Band
         if basic_upper.iloc[i] < final_upper.iloc[i - 1] or \
            df["close"].iloc[i - 1] > final_upper.iloc[i - 1]:
@@ -188,8 +198,8 @@ def compute_indicators(df: pd.DataFrame) -> pd.DataFrame:
     df["below_vwap"] = df["close"] < df["vwap"]
 
     # Candle vs 9 EMA
-    df["candle_above_ema"] = df["low"] > df["ema_9"]    # Entire candle above EMA
-    df["candle_below_ema"] = df["high"] < df["ema_9"]   # Entire candle below EMA
+    df["candle_above_ema"] = df["close"] > df["ema_9"]   # Close above EMA
+    df["candle_below_ema"] = df["close"] < df["ema_9"]   # Close below EMA
 
     # Buy signal: Price > VWAP + Supertrend Green + Candle above 9 EMA
     df["buy_signal"] = (
