@@ -51,6 +51,17 @@ else
     echo "  Dashboard web server already running on port 8080"
 fi
 
+# Create directories for new strategies (if missing)
+mkdir -p "$ALGO_DIR/momentum/paper_trades" "$ALGO_DIR/momentum/results"
+mkdir -p "$ALGO_DIR/supertrend/paper_trades" "$ALGO_DIR/supertrend/results"
+
+# Generate dashboard & tradebook HTML immediately
+echo ""
+echo "  Generating dashboard & tradebook..."
+cd $ALGO_DIR && export $(grep -v '^\#' $ALGO_DIR/.env | xargs) 2>/dev/null
+$PYTHON $REPORT_SCRIPT --no-email 2>/dev/null && echo "  ✓ dashboard.html generated" || echo "  ✗ dashboard generation failed"
+$PYTHON "$ALGO_DIR/tradebook.py" 2>/dev/null && echo "  ✓ tradebook.html generated" || echo "  ✗ tradebook generation failed"
+
 echo ""
 echo "============================================"
 echo "  Cron jobs installed!"
