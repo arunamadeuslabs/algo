@@ -237,8 +237,8 @@ def run(algo_keys: list):
     # Start dashboard server
     dashboard_script = str(BASE_DIR / "dashboard_server.py")
     if os.path.exists(dashboard_script):
-        log.info("  Starting dashboard server on port 8050...")
-        dash_cmd = [PYTHON, dashboard_script, "--no-browser", "--port", "8050"]
+        log.info("  Starting dashboard server on port 8080...")
+        dash_cmd = [PYTHON, dashboard_script, "--no-browser", "--port", "8080"]
         dash_kwargs = dict(
             cwd=str(BASE_DIR),
             stdout=subprocess.DEVNULL,
@@ -249,7 +249,7 @@ def run(algo_keys: list):
         dash_proc = subprocess.Popen(dash_cmd, **dash_kwargs)
         processes["dashboard"] = dash_proc
         pids["dashboard"] = dash_proc.pid
-        log.info(f"    Dashboard PID: {dash_proc.pid} — http://localhost:8050")
+        log.info(f"    Dashboard PID: {dash_proc.pid} — http://localhost:8080")
 
     save_pids(pids)
     desktop_notify("Algos Started", f"Running: {', '.join(algo_keys)}")
