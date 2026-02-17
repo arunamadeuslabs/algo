@@ -1,4 +1,0 @@
-trade_id,date,entry_spot,exit_spot,ce_strike,pe_strike,ce_entry_prem,pe_entry_prem,ce_exit_prem,pe_exit_prem,gross_pnl,costs,net_pnl,exit_reason,ce_status,pe_status,capital
-1,2026-02-12,25843.9,25855.45,26000,25700,59.53,54.24,53.72,52.6,186.44,206.94,-20.5,Trail SL Hit,SL_HIT,SL_HIT,149979.5
-2,2026-02-13,25602.65,25579.4,25750,25450,61.28,50.81,50.51,66.05,-111.82,207.3,-319.12,Trail SL Hit,SL_HIT,SL_HIT,149660.38
-3,2026-02-16,25480.65,25496.65,25650,25350,54.02,56.89,56.78,55.85,-43.2,207.13,-250.33,Trail SL Hit,SL_HIT,SL_HIT,149410.05
