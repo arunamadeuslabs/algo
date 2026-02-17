@@ -163,6 +163,31 @@ mkdir -p momentum/paper_trades momentum/results
 mkdir -p ironcondor/paper_trades ironcondor/results
 ok "All directories ready"
 
+# ── 5b. Seed paper trade data if empty ─────────────────────
+# Run backtests to populate trade logs if no data exists yet
+if [ ! -f "backtest/paper_trades/paper_trade_log.csv" ] || [ ! -f "ironcondor/paper_trades/ic_trade_log.csv" ]; then
+    header "5b" "Seeding initial data via backtests (90 days)..."
+    echo "  This runs once to populate the dashboard with historical data."
+    echo ""
+
+    cd "$ALGO_DIR/backtest"
+    $PYTHON main.py --days 90 --no-charts 2>&1 | tail -3 && ok "EMA backtest done" || warn "EMA backtest failed"
+
+    cd "$ALGO_DIR/sapphire"
+    $PYTHON main.py --days 90 --no-charts 2>&1 | tail -3 && ok "Sapphire backtest done" || warn "Sapphire backtest failed"
+
+    cd "$ALGO_DIR/momentum"
+    $PYTHON main.py --days 90 --no-charts 2>&1 | tail -3 && ok "Momentum backtest done" || warn "Momentum backtest failed"
+
+    cd "$ALGO_DIR/ironcondor"
+    $PYTHON main.py --days 90 --no-charts 2>&1 | tail -3 && ok "Iron Condor backtest done" || warn "Iron Condor backtest failed"
+
+    cd "$ALGO_DIR"
+    echo ""
+else
+    ok "Trade data already exists, skipping backtest seed"
+fi
+
 # ── 6. Kill old processes & start fresh ──────────────────────
 header "6/7" "Starting services..."
 
@@ -234,8 +259,9 @@ echo "    24/7      → Dashboard always on"
 echo ""
 echo "  URLs:"
 echo "    Live Dashboard: http://$PUBLIC_IP:8050"
-echo "    Tradebook:      http://$PUBLIC_IP:8080/tradebook.html"
-echo "    Daily Report:   http://$PUBLIC_IP:8080/dashboard.html"
+echo "    Tradebook:      http://$PUBLIC_IP:8050/tradebook.html"
+echo "    Daily Report:   http://$PUBLIC_IP:8050/dashboard.html"
+echo "    API:            http://$PUBLIC_IP:8050/api/data"
 echo ""
 echo "  Commands:"
 echo "    bash go_live.sh --status    # Check status"

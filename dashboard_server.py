@@ -142,17 +142,19 @@ def get_dashboard_data() -> dict:
         state = _read_state(cfg["state_file"])
         log_lines = _read_last_log_lines(cfg["log_file"], n=3)
 
-        # Capital from state or CSV
-        capital = state.get("capital", init_cap)
-        if not df.empty and cfg["capital_col"] in df.columns:
-            capital = df[cfg["capital_col"]].iloc[-1]
-        total_capital += capital
-
-        # All-time P&L
-        all_time_pnl = capital - init_cap
+        # All-time P&L = sum of net_pnl column (most reliable)
+        all_time_pnl = 0
         if not df.empty and cfg["pnl_col"] in df.columns:
             all_time_pnl = df[cfg["pnl_col"]].sum()
         total_all_time_pnl += all_time_pnl
+
+        # Capital = initial + cumulative P&L (don't trust CSV capital column)
+        capital = init_cap + all_time_pnl
+        # Override from state if paper trading is actively tracking it
+        state_cap = state.get("capital")
+        if state_cap and state_cap > 0:
+            capital = state_cap
+        total_capital += capital
 
         # Today's trades
         today_trades = pd.DataFrame()
@@ -216,6 +218,8 @@ def get_dashboard_data() -> dict:
             "today_win_rate": round(today_wins / today_count * 100, 1) if today_count else 0,
             "total_trades": trade_count,
             "win_rate": round(win_rate, 1),
+            "avg_trade": round(all_time_pnl / trade_count, 2) if trade_count else 0,
+            "today_win_rate": round(today_wins / today_count * 100, 1) if today_count else 0,
             "recent_trades": recent,
             "open_position": open_position,
             "last_log": log_lines,
@@ -335,6 +339,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .strat-hdr .badge.stopped{background:#ff174422;color:#ff1744;border:1px solid #ff174444}
 .strat-body{padding:16px}
 .sg{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
+.sg.six{grid-template-columns:repeat(3,1fr)}
 .si{text-align:center;padding:8px;background:#0d1117;border-radius:6px}
 .si .l{color:#8b949e;font-size:10px;text-transform:uppercase}
 .si .v{font-size:16px;font-weight:700;margin-top:2px}
@@ -372,7 +377,11 @@ tr:hover{background:#1c2128}
 </tr></thead><tbody id="tradeBody"></tbody></table></div>
 </div>
 
-<div class="footer" id="footerText">Auto-refreshes every 30 seconds</div>
+<div class="footer" id="footerText">
+  <a href="/tradebook.html" target="_blank" style="color:#58a6ff;text-decoration:none;margin-right:16px">📒 Tradebook</a>
+  <a href="/dashboard.html" target="_blank" style="color:#58a6ff;text-decoration:none;margin-right:16px">📊 Daily Report</a>
+  <span>Auto-refreshes every 30 seconds</span>
+</div>
 
 <script>
 const API = '/api/data';
@@ -398,7 +407,7 @@ function render(d) {
              d.total_today_trades + ' trades', pnlCl(d.total_today_pnl));
   tc += card('All-Time P&L', pnlFmt(d.total_all_time_pnl), fmtPct(d.total_all_time_return_pct),
              pnlCl(d.total_all_time_pnl));
-  tc += card('Total Trades', d.total_trades, 'across 4 strategies', '#58a6ff');
+  tc += card('Total Trades', d.total_trades, d.strategies ? Object.keys(d.strategies).length + ' strategies' : '', '#58a6ff');
   document.getElementById('topCards').innerHTML = tc;
 
   // Strategy cards
@@ -460,9 +469,9 @@ function stratCard(key, s) {
   sg += si('Capital', fmt(s.capital));
   sg += si("Today P&L", pnlFmt(s.today_pnl), pnlCl(s.today_pnl));
   sg += si('Today Trades', s.today_trades);
+  sg += si('Today Win Rate', (s.today_win_rate||0)+'%');
   sg += si('All-Time P&L', pnlFmt(s.all_time_pnl), pnlCl(s.all_time_pnl));
-  sg += si('Return', fmtPct(s.all_time_return_pct), pnlCl(s.all_time_return_pct));
-  sg += si('Win Rate', s.win_rate + '%', s.win_rate >= 50 ? '#00c853' : '#ff1744');
+  sg += si('Avg Trade', pnlFmt(s.avg_trade), pnlCl(s.avg_trade));
 
   let openPos = '';
   if (s.open_position) {
