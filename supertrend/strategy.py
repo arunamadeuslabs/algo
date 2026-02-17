@@ -33,11 +33,14 @@ from config import (
     EMA_PERIOD,
     MAX_SL_PER_TRADE, TARGET_MIN, TARGET_MAX, RISK_REWARD_RATIO,
     SL_BUFFER_POINTS, MIN_SL_POINTS, MAX_SL_POINTS,
+    BREAKEVEN_ACTIVATE_POINTS, BREAKEVEN_LOCK_POINTS,
+    TRAIL_WITH_SUPERTREND,
     TRAIL_ACTIVATE_POINTS, TRAIL_LOCK_PCT,
     TIGHT_TRAIL_ACTIVATE, TIGHT_TRAIL_LOCK_PCT,
     ENTRY_COOLDOWN_BARS, MAX_TRADES_PER_DAY, MAX_LOSS_PER_DAY,
     INCLUDE_COSTS, BROKERAGE_PER_ORDER, SLIPPAGE_POINTS,
     STT_RATE, EXCHANGE_CHARGES, GST_RATE, SEBI_CHARGES, STAMP_DUTY,
+    REQUIRE_STRONG_CANDLE,
 )
 from data_utils import compute_indicators
 
@@ -294,24 +297,17 @@ class SupertrendBacktest:
 
     def _generate_signal(self, row: pd.Series) -> Signal:
         """
-        Generate entry signal:
-        LONG:  Price > VWAP + Supertrend Green + Candle above 9 EMA
-        SHORT: Price < VWAP + Supertrend Red  + Candle below 9 EMA
+        Generate entry signal (v2 — stricter filters):
+        LONG:  Price > VWAP + Supertrend Green (stable) + Candle above 9 EMA
+               + ADX > 20 + VWAP distance OK + EMA rising + strong candle
+        SHORT: Price < VWAP + Supertrend Red (stable) + Candle below 9 EMA
+               + ADX > 20 + VWAP distance OK + EMA falling + strong candle
         """
         buy = row.get("buy_signal", False)
         sell = row.get("sell_signal", False)
 
-        # Additional confirmation: prefer strong candles
-        bullish = row.get("bullish_candle", False)
-        bearish = row.get("bearish_candle", False)
-
-        if buy and bullish:
-            return Signal.LONG
-
-        if sell and bearish:
-            return Signal.SHORT
-
-        # Allow entry even without strong candle if all 3 conditions align
+        # buy_signal and sell_signal already include all filters
+        # (ADX, VWAP distance, EMA slope, supertrend stability, strong candle)
         if buy:
             return Signal.LONG
         if sell:
@@ -384,7 +380,11 @@ class SupertrendBacktest:
         return trade
 
     def _manage_trade(self, trade: Trade, row: pd.Series, ts, time_str: str) -> Trade:
-        """Manage open trade: check SL, target, trailing, EOD, supertrend flip."""
+        """
+        Manage open trade (v4 — simplified clean exits):
+        Exit only at: Target | Stop Loss | Supertrend Flip | EOD
+        No trailing stop — let Supertrend flip catch reversals naturally.
+        """
         price = row["close"]
         high = row["high"]
         low = row["low"]
@@ -399,7 +399,7 @@ class SupertrendBacktest:
             if low <= trade.sl_price:
                 trade.exit_price = trade.sl_price
                 trade.exit_time = ts
-                trade.status = TradeStatus.SL_HIT if not trade.trail_active else TradeStatus.TRAILING_SL
+                trade.status = TradeStatus.SL_HIT
                 self._calculate_pnl(trade)
                 return trade
 
@@ -420,26 +420,11 @@ class SupertrendBacktest:
                 self._close_trade(trade, row, ts, TradeStatus.TRAILING_SL)
                 return trade
 
-            # --- Trailing Stop ---
-            profit_points = high - trade.entry_price
-            if profit_points >= TRAIL_ACTIVATE_POINTS and not trade.trail_active:
-                trade.trail_active = True
-            if profit_points >= TIGHT_TRAIL_ACTIVATE and not trade.tight_trail_active:
-                trade.tight_trail_active = True
-
-            if trade.tight_trail_active:
-                new_sl = high - profit_points * (1 - TIGHT_TRAIL_LOCK_PCT)
-                trade.sl_price = max(trade.sl_price, new_sl)
-            elif trade.trail_active:
-                new_sl = high - profit_points * (1 - TRAIL_LOCK_PCT)
-                trade.sl_price = max(trade.sl_price, new_sl)
-            trade.trailing_sl = trade.sl_price
-
         else:  # SHORT
             if high >= trade.sl_price:
                 trade.exit_price = trade.sl_price
                 trade.exit_time = ts
-                trade.status = TradeStatus.SL_HIT if not trade.trail_active else TradeStatus.TRAILING_SL
+                trade.status = TradeStatus.SL_HIT
                 self._calculate_pnl(trade)
                 return trade
 
@@ -457,20 +442,6 @@ class SupertrendBacktest:
             if st_dir == 1:
                 self._close_trade(trade, row, ts, TradeStatus.TRAILING_SL)
                 return trade
-
-            profit_points = trade.entry_price - low
-            if profit_points >= TRAIL_ACTIVATE_POINTS and not trade.trail_active:
-                trade.trail_active = True
-            if profit_points >= TIGHT_TRAIL_ACTIVATE and not trade.tight_trail_active:
-                trade.tight_trail_active = True
-
-            if trade.tight_trail_active:
-                new_sl = low + profit_points * (1 - TIGHT_TRAIL_LOCK_PCT)
-                trade.sl_price = min(trade.sl_price, new_sl)
-            elif trade.trail_active:
-                new_sl = low + profit_points * (1 - TRAIL_LOCK_PCT)
-                trade.sl_price = min(trade.sl_price, new_sl)
-            trade.trailing_sl = trade.sl_price
 
         return trade
 

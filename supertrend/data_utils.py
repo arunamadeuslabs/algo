@@ -147,6 +147,57 @@ def compute_atr(df: pd.DataFrame, period: int = 14) -> pd.Series:
     return tr.rolling(window=period).mean()
 
 
+# ─── ADX (Average Directional Index) ────────────────────────────────────────
+
+def compute_adx(df: pd.DataFrame, period: int = 14) -> pd.DataFrame:
+    """
+    Compute ADX (Average Directional Index) for trend strength.
+    ADX > 20 = trending, ADX < 20 = ranging/choppy.
+    Adds 'adx', 'plus_di', 'minus_di' columns.
+    """
+    df = df.copy()
+
+    high = df["high"]
+    low = df["low"]
+    close = df["close"]
+
+    # True Range
+    tr1 = high - low
+    tr2 = abs(high - close.shift(1))
+    tr3 = abs(low - close.shift(1))
+    tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
+
+    # Directional Movement
+    up_move = high - high.shift(1)
+    down_move = low.shift(1) - low
+
+    plus_dm = pd.Series(np.where((up_move > down_move) & (up_move > 0), up_move, 0),
+                        index=df.index)
+    minus_dm = pd.Series(np.where((down_move > up_move) & (down_move > 0), down_move, 0),
+                         index=df.index)
+
+    # Smoothed TR, +DM, -DM (Wilder's smoothing)
+    atr = tr.ewm(alpha=1/period, adjust=False).mean()
+    smooth_plus_dm = plus_dm.ewm(alpha=1/period, adjust=False).mean()
+    smooth_minus_dm = minus_dm.ewm(alpha=1/period, adjust=False).mean()
+
+    # +DI, -DI
+    plus_di = 100 * smooth_plus_dm / atr.replace(0, np.nan)
+    minus_di = 100 * smooth_minus_dm / atr.replace(0, np.nan)
+
+    # DX and ADX
+    di_sum = plus_di + minus_di
+    di_diff = abs(plus_di - minus_di)
+    dx = 100 * di_diff / di_sum.replace(0, np.nan)
+    adx = dx.ewm(alpha=1/period, adjust=False).mean()
+
+    df["adx"] = adx
+    df["plus_di"] = plus_di
+    df["minus_di"] = minus_di
+
+    return df
+
+
 # ─── Strong Candle Check ────────────────────────────────────────────────────
 
 def is_strong_candle(row: pd.Series, min_body_pct: float = 0.35) -> bool:
@@ -168,6 +219,8 @@ def compute_indicators(df: pd.DataFrame) -> pd.DataFrame:
     from config import (
         SUPERTREND_PERIOD, SUPERTREND_MULTIPLIER,
         EMA_PERIOD, MIN_CANDLE_BODY_PCT, MIN_VOLUME_RATIO,
+        ADX_PERIOD, ADX_THRESHOLD,
+        MIN_VWAP_DISTANCE, SUPERTREND_CONFIRM_BARS,
     )
 
     df = df.copy()
@@ -201,20 +254,54 @@ def compute_indicators(df: pd.DataFrame) -> pd.DataFrame:
     df["candle_above_ema"] = df["close"] > df["ema_9"]   # Close above EMA
     df["candle_below_ema"] = df["close"] < df["ema_9"]   # Close below EMA
 
-    # Buy signal: Price > VWAP + Supertrend Green + Candle above 9 EMA
+    # --- ADX Trend Filter ---
+    df = compute_adx(df, ADX_PERIOD)
+
+    # --- VWAP Distance Filter ---
+    df["vwap_distance"] = abs(df["close"] - df["vwap"])
+    df["vwap_distance_ok"] = df["vwap_distance"] >= MIN_VWAP_DISTANCE
+
+    # --- EMA Slope Filter (EMA trending in trade direction) ---
+    df["ema_slope"] = df["ema_9"] - df["ema_9"].shift(1)
+    df["ema_rising"] = df["ema_slope"] > 0
+    df["ema_falling"] = df["ema_slope"] < 0
+
+    # --- Supertrend Stability (same direction for N bars) ---
+    df["st_stable_green"] = True
+    df["st_stable_red"] = True
+    for i in range(1, SUPERTREND_CONFIRM_BARS + 1):
+        df["st_stable_green"] = df["st_stable_green"] & (df["supertrend_direction"].shift(i) == 1)
+        df["st_stable_red"] = df["st_stable_red"] & (df["supertrend_direction"].shift(i) == -1)
+
+    # --- Trending market flag ---
+    df["trending"] = df["adx"] >= ADX_THRESHOLD
+
+    # Buy signal: Price > VWAP + Supertrend Green (stable) + Candle above 9 EMA
+    #           + ADX > 20 + VWAP distance OK + EMA rising + strong candle
     df["buy_signal"] = (
         df["above_vwap"] &
         df["supertrend_green"] &
+        df["st_stable_green"] &
         df["candle_above_ema"] &
-        df["volume_ok"]
+        df["ema_rising"] &
+        df["trending"] &
+        df["vwap_distance_ok"] &
+        df["volume_ok"] &
+        df["bullish_candle"]
     )
 
-    # Sell signal: Price < VWAP + Supertrend Red + Candle below 9 EMA
+    # Sell signal: Price < VWAP + Supertrend Red (stable) + Candle below 9 EMA
+    #           + ADX > 20 + VWAP distance OK + EMA falling + strong candle
     df["sell_signal"] = (
         df["below_vwap"] &
         df["supertrend_red"] &
+        df["st_stable_red"] &
         df["candle_below_ema"] &
-        df["volume_ok"]
+        df["ema_falling"] &
+        df["trending"] &
+        df["vwap_distance_ok"] &
+        df["volume_ok"] &
+        df["bearish_candle"]
     )
 
     return df

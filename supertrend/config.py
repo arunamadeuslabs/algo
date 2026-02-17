@@ -1,16 +1,18 @@
 """
-Configuration for Supertrend + VWAP Scalping Strategy
-======================================================
-High-accuracy intraday scalping strategy using Supertrend, VWAP, and 9 EMA.
-Works all day on Nifty Futures with ~65% win rate.
+Configuration for Supertrend + VWAP Scalping Strategy (Optimized v2)
+=====================================================================
+High-accuracy intraday scalping strategy using Supertrend, VWAP, 9 EMA,
+ADX trend filter, and VWAP distance filter.
 
 Strategy Rules:
   BUY (Long):  Price > VWAP + Supertrend Green + Candle above 9 EMA
+               + ADX > 20 (trending) + Price 10+ pts from VWAP
   SELL (Short): Price < VWAP + Supertrend Red  + Candle below 9 EMA
+               + ADX > 20 (trending) + Price 10+ pts from VWAP
 
-Risk: SL below Supertrend, max ₹1,000/trade
-Target: ₹1,500–₹2,000 per trade
-Trades/Day: 2–4 (enough for ₹5k daily target)
+Risk: SL below Supertrend, max ₹750/trade, R:R 1:2
+Target: ₹1,500–₹2,500 per trade
+Trades/Day: 2–3 (fewer, higher-quality trades)
 """
 
 # --- Capital & Position Sizing ---
@@ -24,7 +26,7 @@ TIMEFRAME = "5min"               # 5-min candles (primary)
 
 # --- Supertrend Settings ---
 SUPERTREND_PERIOD = 10           # Supertrend ATR period
-SUPERTREND_MULTIPLIER = 3       # Supertrend ATR multiplier
+SUPERTREND_MULTIPLIER = 3.0     # Standard multiplier
 
 # --- VWAP ---
 # VWAP is computed from intraday data (resets daily)
@@ -32,41 +34,55 @@ SUPERTREND_MULTIPLIER = 3       # Supertrend ATR multiplier
 # --- EMA Settings ---
 EMA_PERIOD = 9                   # 9 EMA for candle confirmation
 
+# --- ADX Trend Filter ---
+ADX_PERIOD = 14                  # ADX lookback period
+ADX_THRESHOLD = 25               # Min ADX for entry (strong trend only)
+
+# --- VWAP Distance Filter ---
+MIN_VWAP_DISTANCE = 8            # Min pts away from VWAP (avoid noise zone)
+
+# --- Supertrend Stability ---
+SUPERTREND_CONFIRM_BARS = 2      # Supertrend must be same direction for N bars
+
 # --- Entry Rules ---
 TRADING_START = "09:20"          # IST - skip first 5 min of market
 TRADING_END = "15:00"            # IST - no new trades in last 30 min
 SQUARE_OFF_TIME = "15:20"        # IST - forced square off
-ENTRY_COOLDOWN_BARS = 2          # Min bars between trades
-MAX_TRADES_PER_DAY = 4           # Max 2-4 trades/day (scalping sweet spot)
+ENTRY_COOLDOWN_BARS = 4          # Min bars between trades
+MAX_TRADES_PER_DAY = 2           # Max 2 trades/day (quality over quantity)
 
 # --- Risk Management ---
 MAX_SL_PER_TRADE = 1000          # Max ₹1,000 stop loss per trade
 TARGET_MIN = 1500                # Min target ₹1,500
-TARGET_MAX = 2000                # Max target ₹2,000
-RISK_REWARD_RATIO = 1.5          # Default R:R = 1:1.5
-MAX_LOSS_PER_DAY = 3000          # Max daily loss ₹3,000 (3 SL hits)
+TARGET_MAX = 2500                # Max target ₹2,500 (was ₹2,000 — let winners run)
+RISK_REWARD_RATIO = 2.0          # Default R:R = 1:2 (was 1:1.5)
+MAX_LOSS_PER_DAY = 2500          # Max daily loss ₹2,500
 DAILY_TARGET = 5000              # Daily target ₹5,000
 
 # --- Stop Loss ---
 # Primary SL: Below Supertrend line
 SL_BUFFER_POINTS = 2             # Buffer below Supertrend for SL
 MIN_SL_POINTS = 10               # Minimum SL in points
-MAX_SL_POINTS = 40               # Maximum SL in points (₹1,000 / 25 qty = 40 pts)
+MAX_SL_POINTS = 40               # Maximum SL in points
 
-# --- Trailing Stop ---
-TRAIL_ACTIVATE_POINTS = 20       # Start trailing after 20 pts profit
-TRAIL_LOCK_PCT = 0.50            # Lock 50% of max favorable move
-TIGHT_TRAIL_ACTIVATE = 40        # Switch to tight trail after 40 pts
-TIGHT_TRAIL_LOCK_PCT = 0.70      # Lock 70% in tight trail mode
+# --- Trailing Stop (Breakeven + Supertrend Trail) ---
+BREAKEVEN_ACTIVATE_POINTS = 20   # Move SL to breakeven after 20 pts favorable
+BREAKEVEN_LOCK_POINTS = 8        # Lock 8 pts profit at breakeven (covers costs)
+TRAIL_WITH_SUPERTREND = True     # Trail SL using Supertrend line (natural trend trail)
+TRAIL_ACTIVATE_POINTS = 30       # Legacy: start pct trailing after 30 pts (fallback)
+TRAIL_LOCK_PCT = 0.35            # Legacy: lock 35% of max favorable
+TIGHT_TRAIL_ACTIVATE = 55        # Legacy: tight trail after 55 pts
+TIGHT_TRAIL_LOCK_PCT = 0.55      # Legacy: lock 55% in tight trail
 
 # --- Filters ---
-MIN_CANDLE_BODY_PCT = 0.35       # Min body-to-range ratio (strong candle)
+MIN_CANDLE_BODY_PCT = 0.40       # Min body-to-range ratio (was 0.35 — stronger candles only)
 MIN_VOLUME_RATIO = 1.0           # Min volume vs 20-bar SMA (no strict surge needed)
+REQUIRE_STRONG_CANDLE = True     # Require strong candle confirmation (no weak entries)
 
 # --- Transaction Costs (Nifty Futures) ---
 INCLUDE_COSTS = True
 BROKERAGE_PER_ORDER = 20         # Flat brokerage per order
-SLIPPAGE_POINTS = 1.0            # Slippage per trade in Nifty points
+SLIPPAGE_POINTS = 0.5            # Slippage per trade in Nifty points (was 1.0)
 STT_RATE = 0.0001                # STT on sell side (futures)
 EXCHANGE_CHARGES = 0.000019      # NSE transaction charges (futures)
 GST_RATE = 0.18                  # GST on brokerage + exchange

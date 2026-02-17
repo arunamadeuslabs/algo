@@ -53,7 +53,7 @@ fi
 
 # Create directories for new strategies (if missing)
 mkdir -p "$ALGO_DIR/momentum/paper_trades" "$ALGO_DIR/momentum/results"
-mkdir -p "$ALGO_DIR/supertrend/paper_trades" "$ALGO_DIR/supertrend/results"
+mkdir -p "$ALGO_DIR/ironcondor/paper_trades" "$ALGO_DIR/ironcondor/results"
 
 # Generate dashboard & tradebook HTML immediately
 echo ""

@@ -38,7 +38,7 @@ BASE_DIR = Path(os.path.dirname(os.path.abspath(__file__)))
 BACKTEST_DIR = BASE_DIR / "backtest"
 SAPPHIRE_DIR = BASE_DIR / "sapphire"
 MOMENTUM_DIR = BASE_DIR / "momentum"
-SUPERTREND_DIR = BASE_DIR / "supertrend"
+IRONCONDOR_DIR = BASE_DIR / "ironcondor"
 DASHBOARD_FILE = BASE_DIR / "dashboard.html"
 
 # Trade log paths
@@ -54,9 +54,9 @@ MOMENTUM_TRADE_LOG = MOMENTUM_DIR / "paper_trades" / "momentum_trade_log.csv"
 MOMENTUM_DAILY_LOG = MOMENTUM_DIR / "paper_trades" / "momentum_daily_summary.csv"
 MOMENTUM_STATE = MOMENTUM_DIR / "paper_trades" / "momentum_state.json"
 
-SUPERTREND_TRADE_LOG = SUPERTREND_DIR / "paper_trades" / "supertrend_trade_log.csv"
-SUPERTREND_DAILY_LOG = SUPERTREND_DIR / "paper_trades" / "supertrend_daily_summary.csv"
-SUPERTREND_STATE = SUPERTREND_DIR / "paper_trades" / "supertrend_state.json"
+IRONCONDOR_TRADE_LOG = IRONCONDOR_DIR / "paper_trades" / "ic_trade_log.csv"
+IRONCONDOR_DAILY_LOG = IRONCONDOR_DIR / "paper_trades" / "ic_daily_summary.csv"
+IRONCONDOR_STATE = IRONCONDOR_DIR / "paper_trades" / "ic_state.json"
 
 # Load .env
 try:
@@ -153,7 +153,7 @@ def generate_report() -> dict:
     report = {
         "date": get_today_str(),
         "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "ema": {}, "sapphire": {}, "momentum": {}, "supertrend": {},
+        "ema": {}, "sapphire": {}, "momentum": {}, "ironcondor": {},
     }
 
     # EMA Crossover
@@ -207,45 +207,45 @@ def generate_report() -> dict:
         "today_trades_detail": mom_today.to_dict("records") if not mom_today.empty else [],
     }
 
-    # Supertrend VWAP Scalping
-    st_all = load_trades(SUPERTREND_TRADE_LOG)
-    st_state = load_state(SUPERTREND_STATE)
-    st_today = filter_today(st_all, "date") if not st_all.empty else pd.DataFrame()
-    st_week = filter_week(st_all, "date") if not st_all.empty else pd.DataFrame()
-    st_month = filter_month(st_all, "date") if not st_all.empty else pd.DataFrame()
-    report["supertrend"] = {
-        "today": calc_stats(st_today),
-        "week": calc_stats(st_week),
-        "month": calc_stats(st_month),
-        "all_time": calc_stats(st_all),
-        "capital": st_state.get("capital", 300000),
-        "initial_capital": st_state.get("initial_capital", 300000),
-        "total_trades": len(st_all),
-        "today_trades_detail": st_today.to_dict("records") if not st_today.empty else [],
+    # Iron Condor
+    ic_all = load_trades(IRONCONDOR_TRADE_LOG)
+    ic_state = load_state(IRONCONDOR_STATE)
+    ic_today = filter_today(ic_all, "date") if not ic_all.empty else pd.DataFrame()
+    ic_week = filter_week(ic_all, "date") if not ic_all.empty else pd.DataFrame()
+    ic_month = filter_month(ic_all, "date") if not ic_all.empty else pd.DataFrame()
+    report["ironcondor"] = {
+        "today": calc_stats(ic_today),
+        "week": calc_stats(ic_week),
+        "month": calc_stats(ic_month),
+        "all_time": calc_stats(ic_all),
+        "capital": ic_state.get("capital", 400000),
+        "initial_capital": ic_state.get("initial_capital", 400000),
+        "total_trades": len(ic_all),
+        "today_trades_detail": ic_today.to_dict("records") if not ic_today.empty else [],
     }
 
     # Combined
     ema_cap = report["ema"]["capital"]
     sap_cap = report["sapphire"]["capital"]
     mom_cap = report["momentum"]["capital"]
-    st_cap = report["supertrend"]["capital"]
+    ic_cap = report["ironcondor"]["capital"]
     ema_init = report["ema"]["initial_capital"]
     sap_init = report["sapphire"]["initial_capital"]
     mom_init = report["momentum"]["initial_capital"]
-    st_init = report["supertrend"]["initial_capital"]
-    total_cap = ema_cap + sap_cap + mom_cap + st_cap
-    total_init = ema_init + sap_init + mom_init + st_init
+    ic_init = report["ironcondor"]["initial_capital"]
+    total_cap = ema_cap + sap_cap + mom_cap + ic_cap
+    total_init = ema_init + sap_init + mom_init + ic_init
     report["combined"] = {
         "total_capital": round(total_cap, 2),
         "initial_capital": round(total_init, 2),
         "total_return": round(total_cap - total_init, 2),
         "total_return_pct": round((total_cap / total_init - 1) * 100, 2) if total_init > 0 else 0,
-        "today_pnl": round(report["ema"]["today"]["total_pnl"] + report["sapphire"]["today"]["total_pnl"] + report["momentum"]["today"]["total_pnl"] + report["supertrend"]["today"]["total_pnl"], 2),
-        "today_trades": report["ema"]["today"]["trades"] + report["sapphire"]["today"]["trades"] + report["momentum"]["today"]["trades"] + report["supertrend"]["today"]["trades"],
-        "week_pnl": round(report["ema"]["week"]["total_pnl"] + report["sapphire"]["week"]["total_pnl"] + report["momentum"]["week"]["total_pnl"] + report["supertrend"]["week"]["total_pnl"], 2),
-        "week_trades": report["ema"]["week"]["trades"] + report["sapphire"]["week"]["trades"] + report["momentum"]["week"]["trades"] + report["supertrend"]["week"]["trades"],
-        "month_pnl": round(report["ema"]["month"]["total_pnl"] + report["sapphire"]["month"]["total_pnl"] + report["momentum"]["month"]["total_pnl"] + report["supertrend"]["month"]["total_pnl"], 2),
-        "month_trades": report["ema"]["month"]["trades"] + report["sapphire"]["month"]["trades"] + report["momentum"]["month"]["trades"] + report["supertrend"]["month"]["trades"],
+        "today_pnl": round(report["ema"]["today"]["total_pnl"] + report["sapphire"]["today"]["total_pnl"] + report["momentum"]["today"]["total_pnl"] + report["ironcondor"]["today"]["total_pnl"], 2),
+        "today_trades": report["ema"]["today"]["trades"] + report["sapphire"]["today"]["trades"] + report["momentum"]["today"]["trades"] + report["ironcondor"]["today"]["trades"],
+        "week_pnl": round(report["ema"]["week"]["total_pnl"] + report["sapphire"]["week"]["total_pnl"] + report["momentum"]["week"]["total_pnl"] + report["ironcondor"]["week"]["total_pnl"], 2),
+        "week_trades": report["ema"]["week"]["trades"] + report["sapphire"]["week"]["trades"] + report["momentum"]["week"]["trades"] + report["ironcondor"]["week"]["trades"],
+        "month_pnl": round(report["ema"]["month"]["total_pnl"] + report["sapphire"]["month"]["total_pnl"] + report["momentum"]["month"]["total_pnl"] + report["ironcondor"]["month"]["total_pnl"], 2),
+        "month_trades": report["ema"]["month"]["trades"] + report["sapphire"]["month"]["trades"] + report["momentum"]["month"]["trades"] + report["ironcondor"]["month"]["trades"],
     }
     return report
 
@@ -268,7 +268,7 @@ def generate_dashboard(report: dict) -> str:
     ema = report["ema"]
     sap = report["sapphire"]
     mom = report["momentum"]
-    st = report["supertrend"]
+    ic = report["ironcondor"]
     comb = report["combined"]
 
     # Build strategy stat sections for each period
@@ -276,7 +276,7 @@ def generate_dashboard(report: dict) -> str:
         ("EMA Crossover", "#22c55e", ema),
         ("Sapphire Short Strangle", "#3b82f6", sap),
         ("Momentum", "#f97316", mom),
-        ("Supertrend VWAP Scalping", "#14b8a6", st),
+        ("Iron Condor", "#14b8a6", ic),
     ]
 
     def build_strat_sections(period_key, period_label):
@@ -301,7 +301,7 @@ def generate_dashboard(report: dict) -> str:
 
     # Daily P&L chart data
     daily_chart_data = []
-    for log_path, label in [(EMA_DAILY_LOG, "EMA"), (SAPPHIRE_DAILY_LOG, "Sapphire"), (MOMENTUM_DAILY_LOG, "Momentum"), (SUPERTREND_DAILY_LOG, "Supertrend")]:
+    for log_path, label in [(EMA_DAILY_LOG, "EMA"), (SAPPHIRE_DAILY_LOG, "Sapphire"), (MOMENTUM_DAILY_LOG, "Momentum"), (IRONCONDOR_DAILY_LOG, "Iron Condor")]:
         if log_path.exists():
             try:
                 df = pd.read_csv(log_path)
@@ -452,7 +452,7 @@ def generate_email_body(report: dict) -> str:
     ema = report["ema"]
     sap = report["sapphire"]
     mom = report["momentum"]
-    st = report["supertrend"]
+    ic = report["ironcondor"]
     comb = report["combined"]
     def clr(val):
         return "#00c853" if val > 0 else "#ff1744" if val < 0 else "#888888"
@@ -512,13 +512,13 @@ def generate_email_body(report: dict) -> str:
             </table>
         </div>
         <div style="background:#16213e;border-radius:8px;padding:16px;margin-bottom:12px">
-            <h3 style="color:#14b8a6;margin-bottom:8px;font-size:14px">Supertrend VWAP Scalping</h3>
+            <h3 style="color:#14b8a6;margin-bottom:8px;font-size:14px">Iron Condor (Bank Nifty)</h3>
             <table style="width:100%;font-size:13px">
-                <tr><td style="color:#888;padding:4px 0">Today P&amp;L</td><td style="text-align:right;color:{clr(st["today"]["total_pnl"])};font-weight:bold">\u20b9{st["today"]["total_pnl"]:+,.2f}</td></tr>
-                <tr><td style="color:#888;padding:4px 0">Today Trades</td><td style="text-align:right">{st["today"]["trades"]} ({st["today"]["wins"]}W / {st["today"]["losses"]}L)</td></tr>
-                <tr><td style="color:#888;padding:4px 0">Capital</td><td style="text-align:right">\u20b9{st["capital"]:,.0f}</td></tr>
-                <tr><td style="color:#888;padding:4px 0">All-Time Win Rate</td><td style="text-align:right">{st["all_time"]["win_rate"]}% ({st["total_trades"]} trades)</td></tr>
-                <tr><td style="color:#888;padding:4px 0">All-Time P&amp;L</td><td style="text-align:right;color:{clr(st["all_time"]["total_pnl"])};font-weight:bold">\u20b9{st["all_time"]["total_pnl"]:+,.2f}</td></tr>
+                <tr><td style="color:#888;padding:4px 0">Today P&amp;L</td><td style="text-align:right;color:{clr(ic["today"]["total_pnl"])};font-weight:bold">\u20b9{ic["today"]["total_pnl"]:+,.2f}</td></tr>
+                <tr><td style="color:#888;padding:4px 0">Today Trades</td><td style="text-align:right">{ic["today"]["trades"]} ({ic["today"]["wins"]}W / {ic["today"]["losses"]}L)</td></tr>
+                <tr><td style="color:#888;padding:4px 0">Capital</td><td style="text-align:right">\u20b9{ic["capital"]:,.0f}</td></tr>
+                <tr><td style="color:#888;padding:4px 0">All-Time Win Rate</td><td style="text-align:right">{ic["all_time"]["win_rate"]}% ({ic["total_trades"]} trades)</td></tr>
+                <tr><td style="color:#888;padding:4px 0">All-Time P&amp;L</td><td style="text-align:right;color:{clr(ic["all_time"]["total_pnl"])};font-weight:bold">\u20b9{ic["all_time"]["total_pnl"]:+,.2f}</td></tr>
             </table>
         </div>
         <hr style="border:1px solid #333;margin:16px 0">

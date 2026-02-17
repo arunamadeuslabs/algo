@@ -2,7 +2,7 @@
 Trade Book Generator
 =====================
 Generates a comprehensive HTML trade book page showing ALL trades
-across all strategies (EMA, Sapphire, Momentum, Supertrend).
+across all strategies (EMA, Sapphire, Momentum).
 
 Features:
   - Daily / Weekly / Monthly aggregation views
@@ -39,8 +39,8 @@ SAPPHIRE_STATE = BASE_DIR / "sapphire" / "paper_trades" / "sapphire_state.json"
 MOMENTUM_TRADE_LOG = BASE_DIR / "momentum" / "paper_trades" / "momentum_trade_log.csv"
 MOMENTUM_STATE = BASE_DIR / "momentum" / "paper_trades" / "momentum_state.json"
 
-SUPERTREND_TRADE_LOG = BASE_DIR / "supertrend" / "paper_trades" / "supertrend_trade_log.csv"
-SUPERTREND_STATE = BASE_DIR / "supertrend" / "paper_trades" / "supertrend_state.json"
+IRONCONDOR_TRADE_LOG = BASE_DIR / "ironcondor" / "paper_trades" / "ic_trade_log.csv"
+IRONCONDOR_STATE = BASE_DIR / "ironcondor" / "paper_trades" / "ic_state.json"
 
 
 def load_csv(path: Path) -> pd.DataFrame:
@@ -138,26 +138,32 @@ def normalize_momentum_trades(df: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def normalize_supertrend_trades(df: pd.DataFrame) -> pd.DataFrame:
+def normalize_ironcondor_trades(df: pd.DataFrame) -> pd.DataFrame:
     if df.empty:
         return pd.DataFrame()
     rows = []
     for _, r in df.iterrows():
         date_str = str(r.get("date", ""))[:10]
+        sell_ce = r.get("sell_ce_strike", "")
+        buy_ce = r.get("buy_ce_strike", "")
+        sell_pe = r.get("sell_pe_strike", "")
+        buy_pe = r.get("buy_pe_strike", "")
+        credit = float(r.get("credit_received", 0))
+        debit = float(r.get("exit_cost", credit - float(r.get("net_pnl", 0)) + float(r.get("costs", 0))))
         rows.append({
             "date": date_str,
             "entry_time": str(r.get("entry_time", date_str))[:16],
             "exit_time": str(r.get("exit_time", date_str))[:16],
-            "strategy": "Supertrend VWAP",
-            "direction": r.get("direction", "N/A"),
-            "instrument": "NIFTY FUT",
-            "entry_price": r.get("entry_price", ""),
-            "exit_price": r.get("exit_price", ""),
-            "qty": r.get("quantity", 25),
+            "strategy": "Iron Condor",
+            "direction": "IRON CONDOR",
+            "instrument": f"CE{sell_ce}/{buy_ce} PE{sell_pe}/{buy_pe}",
+            "entry_price": round(credit, 2),
+            "exit_price": round(debit, 2),
+            "qty": int(r.get("quantity", 30)),
             "gross_pnl": round(float(r.get("gross_pnl", 0)), 2),
             "costs": round(float(r.get("costs", 0)), 2),
             "net_pnl": round(float(r.get("net_pnl", 0)), 2),
-            "status": r.get("status", "N/A"),
+            "status": r.get("exit_reason", "N/A"),
         })
     return pd.DataFrame(rows)
 
@@ -210,9 +216,9 @@ def generate_tradebook() -> str:
     ema_df = normalize_ema_trades(load_csv(EMA_TRADE_LOG))
     sap_df = normalize_sapphire_trades(load_csv(SAPPHIRE_TRADE_LOG))
     mom_df = normalize_momentum_trades(load_csv(MOMENTUM_TRADE_LOG))
-    st_df = normalize_supertrend_trades(load_csv(SUPERTREND_TRADE_LOG))
+    ic_df = normalize_ironcondor_trades(load_csv(IRONCONDOR_TRADE_LOG))
 
-    all_trades = pd.concat([ema_df, sap_df, mom_df, st_df], ignore_index=True)
+    all_trades = pd.concat([ema_df, sap_df, mom_df, ic_df], ignore_index=True)
     if not all_trades.empty:
         all_trades = all_trades.sort_values("entry_time", ascending=False).reset_index(drop=True)
 
@@ -221,7 +227,7 @@ def generate_tradebook() -> str:
         "EMA Crossover": calc_strategy_stats(ema_df),
         "Sapphire Strangle": calc_strategy_stats(sap_df),
         "Momentum": calc_strategy_stats(mom_df),
-        "Supertrend VWAP": calc_strategy_stats(st_df),
+        "Iron Condor": calc_strategy_stats(ic_df),
     }
     combined = calc_strategy_stats(all_trades)
 
@@ -229,7 +235,7 @@ def generate_tradebook() -> str:
         "EMA Crossover": "#22c55e",
         "Sapphire Strangle": "#3b82f6",
         "Momentum": "#f97316",
-        "Supertrend VWAP": "#14b8a6",
+        "Iron Condor": "#14b8a6",
     }
 
     # Build trades JSON
@@ -416,7 +422,7 @@ tr:hover{{background:#1c2128}}
     <option value="EMA Crossover">EMA Crossover</option>
     <option value="Sapphire Strangle">Sapphire Strangle</option>
     <option value="Momentum">Momentum</option>
-    <option value="Supertrend VWAP">Supertrend VWAP</option>
+    <option value="Iron Condor">Iron Condor</option>
   </select>
   <button class="filter-btn" onclick="resetFilters()">Reset</button>
   <button class="filter-btn" onclick="exportCSV()">Export CSV</button>
@@ -467,7 +473,7 @@ function dirClass(d) {{
   d = (d||'').toUpperCase();
   if (d === 'BUY' || d === 'LONG') return 'dir-buy';
   if (d === 'SELL' || d === 'SHORT') return 'dir-sell';
-  if (d === 'STRANGLE') return 'dir-strangle';
+  if (d === 'STRANGLE' || d === 'IRON CONDOR') return 'dir-strangle';
   return '';
 }}
 
@@ -667,9 +673,9 @@ def main():
     ema_count = len(load_csv(EMA_TRADE_LOG))
     sap_count = len(load_csv(SAPPHIRE_TRADE_LOG))
     mom_count = len(load_csv(MOMENTUM_TRADE_LOG))
-    st_count = len(load_csv(SUPERTREND_TRADE_LOG))
-    total = ema_count + sap_count + mom_count + st_count
-    print(f"  Trades: EMA={ema_count}, Sapphire={sap_count}, Momentum={mom_count}, Supertrend={st_count} | Total={total}")
+    ic_count = len(load_csv(IRONCONDOR_TRADE_LOG))
+    total = ema_count + sap_count + mom_count + ic_count
+    print(f"  Trades: EMA={ema_count}, Sapphire={sap_count}, Momentum={mom_count}, IronCondor={ic_count} | Total={total}")
 
     if args.open:
         import webbrowser

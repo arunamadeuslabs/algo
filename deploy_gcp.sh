@@ -54,7 +54,7 @@ echo "[3/5] Creating directories..."
 mkdir -p backtest/paper_trades backtest/results
 mkdir -p sapphire/paper_trades sapphire/results
 mkdir -p momentum/paper_trades momentum/results
-mkdir -p supertrend/paper_trades supertrend/results
+mkdir -p ironcondor/paper_trades ironcondor/results
 echo "  ✓ Directories ready"
 
 # ── 4. Run all backtests (90 days sample data) ──
@@ -77,10 +77,11 @@ cd "$ALGO_DIR/momentum"
 $PYTHON main.py --days 90 --no-charts 2>&1 | tail -5
 echo ""
 
-echo "  [4d] Supertrend VWAP..."
-cd "$ALGO_DIR/supertrend"
+echo "  [4d] Iron Condor (Bank Nifty)..."
+cd "$ALGO_DIR/ironcondor"
 $PYTHON main.py --days 90 --no-charts 2>&1 | tail -5
 echo ""
+
 
 echo "  ✓ All backtests complete"
 
@@ -112,7 +113,7 @@ t = 0
 for f in ['backtest/paper_trades/paper_trade_log.csv',
            'sapphire/paper_trades/sapphire_trade_log.csv',
            'momentum/paper_trades/momentum_trade_log.csv',
-           'supertrend/paper_trades/supertrend_trade_log.csv']:
+           'ironcondor/paper_trades/ic_trade_log.csv']:
     try:
         t += len(pd.read_csv(f))
     except: pass
