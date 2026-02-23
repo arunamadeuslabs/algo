@@ -50,6 +50,7 @@ from data_utils import (
 )
 from strategy import calculate_costs, LegStatus
 import dhan_api
+from dhan_orders import DhanOrderManager
 
 # ── Constants ────────────────────────────────────────────────
 PAPER_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "paper_trades")
@@ -193,12 +194,14 @@ def append_daily(daily_data: dict):
 class IronCondorPaperTrader:
     """Manages Iron Condor paper trading lifecycle."""
 
-    def __init__(self, state: PaperState, symbol: str = "banknifty"):
+    def __init__(self, state: PaperState, symbol: str = "banknifty", real_mode: bool = False):
         self.state = state
         self.symbol = symbol
         self.quantity = OPTION_LOT_SIZE * NUM_LOTS
         self.position: Optional[PaperPosition] = None
         self._running = True
+        self.real_mode = real_mode
+        self.order_mgr = DhanOrderManager(live=real_mode)
 
         sig.signal(sig.SIGINT, self._handle_signal)
         sig.signal(sig.SIGTERM, self._handle_signal)
@@ -315,6 +318,28 @@ class IronCondorPaperTrader:
         logger.info(f"    Sell {sell_pe}PE @ {sell_pe_prem:.1f} | Buy {buy_pe}PE @ {buy_pe_prem:.1f}")
         logger.info(f"    Net Credit: {net_credit:.1f} pts | Total: ₹{net_credit * self.quantity:,.0f}")
 
+        # Place 4 real orders for Iron Condor
+        self.order_mgr.place_order(
+            transaction_type="SELL", symbol=self.symbol,
+            quantity=self.quantity, strike=sell_ce, option_type="CE",
+            tag=f"ic_sell_ce_entry",
+        )
+        self.order_mgr.place_order(
+            transaction_type="BUY", symbol=self.symbol,
+            quantity=self.quantity, strike=buy_ce, option_type="CE",
+            tag=f"ic_buy_ce_entry",
+        )
+        self.order_mgr.place_order(
+            transaction_type="SELL", symbol=self.symbol,
+            quantity=self.quantity, strike=sell_pe, option_type="PE",
+            tag=f"ic_sell_pe_entry",
+        )
+        self.order_mgr.place_order(
+            transaction_type="BUY", symbol=self.symbol,
+            quantity=self.quantity, strike=buy_pe, option_type="PE",
+            tag=f"ic_buy_pe_entry",
+        )
+
         self.state.current_position = self.position.to_dict()
 
     def _manage_position(self, spot: float, now: datetime):
@@ -379,6 +404,32 @@ class IronCondorPaperTrader:
                 leg.status = reason
 
         pos.exit_reason = reason
+
+        # Place 4 reverse orders to close Iron Condor
+        if pos.short_ce:
+            self.order_mgr.place_order(
+                transaction_type="BUY", symbol=self.symbol,
+                quantity=self.quantity, strike=pos.short_ce.strike, option_type="CE",
+                tag=f"ic_buy_ce_exit_{reason[:6]}",
+            )
+        if pos.long_ce:
+            self.order_mgr.place_order(
+                transaction_type="SELL", symbol=self.symbol,
+                quantity=self.quantity, strike=pos.long_ce.strike, option_type="CE",
+                tag=f"ic_sell_ce_exit_{reason[:6]}",
+            )
+        if pos.short_pe:
+            self.order_mgr.place_order(
+                transaction_type="BUY", symbol=self.symbol,
+                quantity=self.quantity, strike=pos.short_pe.strike, option_type="PE",
+                tag=f"ic_buy_pe_exit_{reason[:6]}",
+            )
+        if pos.long_pe:
+            self.order_mgr.place_order(
+                transaction_type="SELL", symbol=self.symbol,
+                quantity=self.quantity, strike=pos.long_pe.strike, option_type="PE",
+                tag=f"ic_sell_pe_exit_{reason[:6]}",
+            )
 
         # Calculate P&L
         gross = 0
@@ -506,6 +557,8 @@ def main():
     parser.add_argument("--symbol", type=str, default="banknifty",
                         choices=["nifty", "banknifty", "finnifty", "midcapnifty", "sensex"],
                         help="Index to trade (default: banknifty)")
+    parser.add_argument("--real", action="store_true",
+                        help="LIVE TRADING: Place real orders via Dhan API")
     args = parser.parse_args()
 
     if args.reset:
@@ -514,10 +567,10 @@ def main():
         logger.info("  State reset to default.")
         return
 
-    state = load_state() if args.resume or args.live else PaperState()
-    trader = IronCondorPaperTrader(state, symbol=args.symbol)
+    state = load_state() if args.resume or args.live or args.real else PaperState()
+    trader = IronCondorPaperTrader(state, symbol=args.symbol, real_mode=args.real)
 
-    if args.live:
+    if args.live or args.real:
         trader.run_live(resume=args.resume)
     elif args.simulate:
         trader.run_simulate(days=args.days)

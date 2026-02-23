@@ -49,6 +49,7 @@ from data_utils import (
 )
 from strategy import calculate_costs, LegStatus
 import dhan_api
+from dhan_orders import DhanOrderManager
 
 # ── Constants ────────────────────────────────────────────────
 PAPER_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "paper_trades")
@@ -143,12 +144,14 @@ class SapphirePaperEngine:
     """
 
     def __init__(self, interval: int = 5, capital: float = INITIAL_CAPITAL,
-                 resume: bool = False, symbol: str = "nifty"):
+                 resume: bool = False, symbol: str = "nifty", real_mode: bool = False):
         self.interval = interval
         self.capital = capital
         self.initial_capital = capital
         self.quantity = OPTION_LOT_SIZE * NUM_LOTS
         self.symbol = symbol
+        self.real_mode = real_mode
+        self.order_mgr = DhanOrderManager(live=real_mode)
 
         self.current_trade: Optional[PaperStrangle] = None
         self.closed_trades: List[PaperStrangle] = []
@@ -235,6 +238,24 @@ class SapphirePaperEngine:
         logger.info(f"  Combined Premium: {ce_prem + pe_prem:.2f}")
         logger.info("=" * 60)
 
+        # Place real orders if in live mode
+        self.order_mgr.place_order(
+            transaction_type="SELL",
+            symbol=self.symbol,
+            quantity=self.quantity,
+            strike=ce_strike,
+            option_type="CE",
+            tag=f"sapphire_{self.trade_counter}_ce_entry",
+        )
+        self.order_mgr.place_order(
+            transaction_type="SELL",
+            symbol=self.symbol,
+            quantity=self.quantity,
+            strike=pe_strike,
+            option_type="PE",
+            tag=f"sapphire_{self.trade_counter}_pe_entry",
+        )
+
         self._save_state()
 
     # ── Position Management ──────────────────────────────────
@@ -276,6 +297,15 @@ class SapphirePaperEngine:
                 ce.exit_time = now_str
                 ce.status = "SL_HIT"
                 logger.info(f"  CE SL HIT @ {ce.sl_premium:.2f} (entry: {ce.entry_premium:.2f})")
+                # Buy back CE on SL
+                self.order_mgr.place_order(
+                    transaction_type="BUY",
+                    symbol=self.symbol,
+                    quantity=self.quantity,
+                    strike=ce.strike,
+                    option_type="CE",
+                    tag=f"sapphire_{trade.trade_id}_ce_sl",
+                )
 
         # Update PE leg
         if pe.is_open:
@@ -289,6 +319,15 @@ class SapphirePaperEngine:
                 pe.exit_time = now_str
                 pe.status = "SL_HIT"
                 logger.info(f"  PE SL HIT @ {pe.sl_premium:.2f} (entry: {pe.entry_premium:.2f})")
+                # Buy back PE on SL
+                self.order_mgr.place_order(
+                    transaction_type="BUY",
+                    symbol=self.symbol,
+                    quantity=self.quantity,
+                    strike=pe.strike,
+                    option_type="PE",
+                    tag=f"sapphire_{trade.trade_id}_pe_sl",
+                )
 
         # Combined SL check
         if ce.is_open or pe.is_open:
@@ -301,10 +340,20 @@ class SapphirePaperEngine:
                     ce.exit_premium = ce.current_premium
                     ce.exit_time = now_str
                     ce.status = "COMBINED_SL"
+                    self.order_mgr.place_order(
+                        transaction_type="BUY", symbol=self.symbol,
+                        quantity=self.quantity, strike=ce.strike, option_type="CE",
+                        tag=f"sapphire_{trade.trade_id}_ce_combsl",
+                    )
                 if pe.is_open:
                     pe.exit_premium = pe.current_premium
                     pe.exit_time = now_str
                     pe.status = "COMBINED_SL"
+                    self.order_mgr.place_order(
+                        transaction_type="BUY", symbol=self.symbol,
+                        quantity=self.quantity, strike=pe.strike, option_type="PE",
+                        tag=f"sapphire_{trade.trade_id}_pe_combsl",
+                    )
                 trade.exit_reason = "Combined SL"
                 logger.info(f"  COMBINED SL triggered! Combined prem: {current_combined:.2f} > {trade.entry_combined_prem * (1 + COMBINED_SL_PCT):.2f}")
 
@@ -315,10 +364,20 @@ class SapphirePaperEngine:
                 ce.exit_premium = ce.current_premium
                 ce.exit_time = now_str
                 ce.status = "MAX_LOSS"
+                self.order_mgr.place_order(
+                    transaction_type="BUY", symbol=self.symbol,
+                    quantity=self.quantity, strike=ce.strike, option_type="CE",
+                    tag=f"sapphire_{trade.trade_id}_ce_maxloss",
+                )
             if pe.is_open:
                 pe.exit_premium = pe.current_premium
                 pe.exit_time = now_str
                 pe.status = "MAX_LOSS"
+                self.order_mgr.place_order(
+                    transaction_type="BUY", symbol=self.symbol,
+                    quantity=self.quantity, strike=pe.strike, option_type="PE",
+                    tag=f"sapphire_{trade.trade_id}_pe_maxloss",
+                )
             trade.exit_reason = "Max Daily Loss"
             logger.info(f"  MAX DAILY LOSS triggered! P&L: {running_pnl:.0f}")
 
@@ -369,10 +428,28 @@ class SapphirePaperEngine:
             trade.ce_leg.exit_premium = trade.ce_leg.current_premium
             trade.ce_leg.exit_time = now_str
             trade.ce_leg.status = "EOD"
+            # Buy back CE leg
+            self.order_mgr.place_order(
+                transaction_type="BUY",
+                symbol=self.symbol,
+                quantity=self.quantity,
+                strike=trade.ce_leg.strike,
+                option_type="CE",
+                tag=f"sapphire_{trade.trade_id}_ce_squareoff",
+            )
         if trade.pe_leg.is_open:
             trade.pe_leg.exit_premium = trade.pe_leg.current_premium
             trade.pe_leg.exit_time = now_str
             trade.pe_leg.status = "EOD"
+            # Buy back PE leg
+            self.order_mgr.place_order(
+                transaction_type="BUY",
+                symbol=self.symbol,
+                quantity=self.quantity,
+                strike=trade.pe_leg.strike,
+                option_type="PE",
+                tag=f"sapphire_{trade.trade_id}_pe_squareoff",
+            )
         if not trade.exit_reason:
             trade.exit_reason = "EOD Square-off"
 
@@ -702,6 +779,8 @@ def main():
     parser.add_argument("--symbol", type=str, default="nifty",
                         choices=["nifty", "banknifty", "finnifty", "midcapnifty", "sensex"],
                         help="Index to trade (default: nifty)")
+    parser.add_argument("--real", action="store_true",
+                        help="LIVE TRADING: Place real orders via Dhan API")
 
     args = parser.parse_args()
 
@@ -710,9 +789,10 @@ def main():
         capital=args.capital,
         resume=args.resume,
         symbol=args.symbol,
+        real_mode=args.real,
     )
 
-    if args.live:
+    if args.live or args.real:
         engine.run_live()
     elif args.simulate:
         engine.run_simulate(days=args.days)

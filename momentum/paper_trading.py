@@ -48,6 +48,7 @@ from config import (
 from data_utils import compute_indicators, generate_nifty_data
 from strategy import Signal, TradeStatus, calculate_costs
 import dhan_api
+from dhan_orders import DhanOrderManager
 
 # ── Constants ────────────────────────────────────────────────
 PAPER_DIR = os.path.join(MOMENTUM_DIR, "paper_trades")
@@ -143,11 +144,13 @@ class MomentumPaperEngine:
     """
 
     def __init__(self, interval: int = 5, capital: float = INITIAL_CAPITAL,
-                 resume: bool = False, symbol: str = "nifty"):
+                 resume: bool = False, symbol: str = "nifty", real_mode: bool = False):
         self.interval = interval
         self.capital = capital
         self.initial_capital = capital
         self.symbol = symbol
+        self.real_mode = real_mode
+        self.order_mgr = DhanOrderManager(live=real_mode)
 
         self.current_trade: Optional[PaperTrade] = None
         self.closed_trades: List[PaperTrade] = []
@@ -293,6 +296,15 @@ class MomentumPaperEngine:
         logger.info(f"  ATR       : {atr:.1f}  |  ADX: {row.get('adx', 0):.1f}")
         logger.info("=" * 60)
 
+        # Place real futures order
+        txn = "BUY" if direction == "LONG" else "SELL"
+        self.order_mgr.place_order(
+            transaction_type=txn,
+            symbol=self.symbol,
+            quantity=self.current_trade.full_quantity,
+            tag=f"momentum_{self.trade_counter}_entry",
+        )
+
         self._save_state()
 
     # ── Position Management ──────────────────────────────────
@@ -403,6 +415,15 @@ class MomentumPaperEngine:
         trade.sl_price = trade.entry_price
         trade.trailing_sl = trade.entry_price
 
+        # Place partial exit order (opposite direction)
+        exit_txn = "SELL" if trade.direction == "LONG" else "BUY"
+        self.order_mgr.place_order(
+            transaction_type=exit_txn,
+            symbol=self.symbol,
+            quantity=partial_qty,
+            tag=f"momentum_{trade.trade_id}_partial",
+        )
+
         logger.info(f"  PARTIAL EXIT: {partial_lots} lots @ {exit_price:.2f}")
         logger.info(f"  Partial P&L: {trade.partial_pnl:+,.0f} | Remaining: {trade.current_lots} lots")
         logger.info(f"  SL moved to breakeven: {trade.entry_price:.2f}")
@@ -452,6 +473,15 @@ class MomentumPaperEngine:
         logger.info(f"  Net P&L   : {trade.net_pnl:+,.0f}")
         logger.info(f"  Capital   : {self.capital:,.0f}")
         logger.info("=" * 60)
+
+        # Place remaining exit order
+        exit_txn = "SELL" if trade.direction == "LONG" else "BUY"
+        self.order_mgr.place_order(
+            transaction_type=exit_txn,
+            symbol=self.symbol,
+            quantity=remaining_qty,
+            tag=f"momentum_{trade.trade_id}_close",
+        )
 
         self.current_trade = None
         self._save_state()
@@ -759,6 +789,8 @@ def main():
     parser.add_argument("--symbol", type=str, default="nifty",
                         choices=["nifty", "banknifty", "finnifty", "midcapnifty", "sensex"],
                         help="Index to trade (default: nifty)")
+    parser.add_argument("--real", action="store_true",
+                        help="LIVE TRADING: Place real orders via Dhan API")
 
     args = parser.parse_args()
 
@@ -767,9 +799,10 @@ def main():
         capital=args.capital,
         resume=args.resume,
         symbol=args.symbol,
+        real_mode=args.real,
     )
 
-    if args.live:
+    if args.live or args.real:
         engine.run_live()
     elif args.simulate:
         engine.run_simulate(days=args.days)

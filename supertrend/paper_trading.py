@@ -28,7 +28,9 @@ import numpy as np
 
 # Ensure supertrend directory imports work
 SUPERTREND_DIR = os.path.dirname(os.path.abspath(__file__))
+_ROOT_DIR = os.path.dirname(SUPERTREND_DIR)
 sys.path.insert(0, SUPERTREND_DIR)
+sys.path.insert(0, _ROOT_DIR)
 
 # Dhan API lives in backtest/
 BACKTEST_DIR = os.path.join(SUPERTREND_DIR, '..', 'backtest')
@@ -49,6 +51,7 @@ from config import (
 )
 from data_utils import compute_indicators, generate_nifty_data
 from strategy import Signal, TradeStatus, calculate_costs
+from dhan_orders import DhanOrderManager
 
 # Import Dhan API from backtest directory
 import importlib.util
@@ -142,10 +145,13 @@ class SupertrendPaperEngine:
     """
 
     def __init__(self, interval: int = 5, capital: float = INITIAL_CAPITAL,
-                 resume: bool = False):
+                 resume: bool = False, symbol: str = "nifty", real_mode: bool = False):
         self.interval = interval
         self.capital = capital
         self.initial_capital = capital
+        self.symbol = symbol
+        self.real_mode = real_mode
+        self.order_mgr = DhanOrderManager(live=real_mode)
 
         self.current_trade: Optional[PaperTrade] = None
         self.closed_trades: List[PaperTrade] = []
@@ -274,6 +280,15 @@ class SupertrendPaperEngine:
         logger.info(f"  VWAP       : {row.get('vwap', 0):.2f}")
         logger.info(f"  EMA-9      : {row.get('ema_9', 0):.2f}")
         logger.info("=" * 60)
+
+        # Place real futures order
+        txn = "BUY" if direction == "LONG" else "SELL"
+        self.order_mgr.place_order(
+            transaction_type=txn,
+            symbol=self.symbol,
+            quantity=self.current_trade.quantity,
+            tag=f"supertrend_{self.trade_counter}_entry",
+        )
 
         self._save_state()
 
@@ -412,6 +427,15 @@ class SupertrendPaperEngine:
         logger.info(f"  Capital   : {self.capital:,.0f}")
         logger.info(f"  Daily P&L : {self.daily_profit + self.daily_loss:+,.0f}")
         logger.info("=" * 60)
+
+        # Place exit order (opposite direction)
+        exit_txn = "SELL" if trade.direction == "LONG" else "BUY"
+        self.order_mgr.place_order(
+            transaction_type=exit_txn,
+            symbol=self.symbol,
+            quantity=qty,
+            tag=f"supertrend_{trade.trade_id}_close",
+        )
 
         self.current_trade = None
         self._save_state()
@@ -719,6 +743,11 @@ def main():
     parser.add_argument("--interval", type=int, default=5, help="Candle interval in minutes")
     parser.add_argument("--capital", type=float, default=INITIAL_CAPITAL, help="Starting capital")
     parser.add_argument("--resume", action="store_true", help="Resume from saved state")
+    parser.add_argument("--symbol", type=str, default="nifty",
+                        choices=["nifty", "banknifty", "finnifty", "midcapnifty", "sensex"],
+                        help="Index to trade (default: nifty)")
+    parser.add_argument("--real", action="store_true",
+                        help="LIVE TRADING: Place real orders via Dhan API")
 
     args = parser.parse_args()
 
@@ -726,9 +755,11 @@ def main():
         interval=args.interval,
         capital=args.capital,
         resume=args.resume,
+        symbol=args.symbol,
+        real_mode=args.real,
     )
 
-    if args.live:
+    if args.live or args.real:
         engine.run_live()
     elif args.simulate:
         engine.run_simulate(days=args.days)

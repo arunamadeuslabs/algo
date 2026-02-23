@@ -1,7 +1,7 @@
 """
 Algo Auto-Launcher
 ===================
-Starts all trading algos (EMA Crossover + Sapphire Strangle + Momentum) automatically.
+Starts all trading algos (EMA Crossover + Sapphire Strangle + Momentum + Iron Condor) automatically.
 Designed to be scheduled via Windows Task Scheduler at 09:10 AM Mon-Fri.
 
 Features:
@@ -10,9 +10,11 @@ Features:
   - Auto-kills after market close (15:35)
   - Logs everything to launcher.log
   - Sends desktop notification on trade events
+  - Supports --real flag for live trading with Dhan API orders
 
 Usage:
-  python launcher.py                  # Start all algos
+  python launcher.py                  # Start all algos (paper mode)
+  python launcher.py --real           # Start all algos (LIVE TRADING)
   python launcher.py --sapphire       # Sapphire only
   python launcher.py --ema            # EMA crossover only
   python launcher.py --momentum       # Momentum only
@@ -50,36 +52,42 @@ PID_FILE = BASE_DIR / ".algo_pids.json"
 LOG_FILE = BASE_DIR / "launcher.log"
 
 # ── Algo Definitions ────────────────────────────────────────
-ALGOS = {
-    "ema": {
-        "name": "EMA Crossover Paper Trader",
-        "script": str(BACKTEST_DIR / "paper_trading.py"),
-        "args": ["--live", "--symbol", "sensex"],
-        "cwd": str(BACKTEST_DIR),
-        "log": str(BACKTEST_DIR / "paper_trades" / "paper_trading.log"),
-    },
-    "sapphire": {
-        "name": "Sapphire Short Strangle",
-        "script": str(SAPPHIRE_DIR / "paper_trading.py"),
-        "args": ["--live", "--symbol", "nifty"],
-        "cwd": str(SAPPHIRE_DIR),
-        "log": str(SAPPHIRE_DIR / "paper_trades" / "sapphire_paper.log"),
-    },
-    "momentum": {
-        "name": "Momentum Dual Confirmation",
-        "script": str(MOMENTUM_DIR / "paper_trading.py"),
-        "args": ["--live", "--symbol", "nifty"],
-        "cwd": str(MOMENTUM_DIR),
-        "log": str(MOMENTUM_DIR / "paper_trades" / "momentum_paper.log"),
-    },
-    "ironcondor": {
-        "name": "Iron Condor (Sensex)",
-        "script": str(IRONCONDOR_DIR / "paper_trading.py"),
-        "args": ["--live", "--symbol", "sensex"],
-        "cwd": str(IRONCONDOR_DIR),
-        "log": str(IRONCONDOR_DIR / "paper_trades" / "ic_paper.log"),
-    },
-}
+def get_algos(real_mode: bool = False) -> dict:
+    """Build algo definitions with appropriate mode flag."""
+    mode_flag = "--real" if real_mode else "--live"
+    return {
+        "ema": {
+            "name": "EMA Crossover" + (" [LIVE]" if real_mode else " Paper Trader"),
+            "script": str(BACKTEST_DIR / "paper_trading.py"),
+            "args": [mode_flag, "--symbol", "sensex"],
+            "cwd": str(BACKTEST_DIR),
+            "log": str(BACKTEST_DIR / "paper_trades" / "paper_trading.log"),
+        },
+        "sapphire": {
+            "name": "Sapphire Short Strangle" + (" [LIVE]" if real_mode else ""),
+            "script": str(SAPPHIRE_DIR / "paper_trading.py"),
+            "args": [mode_flag, "--symbol", "nifty"],
+            "cwd": str(SAPPHIRE_DIR),
+            "log": str(SAPPHIRE_DIR / "paper_trades" / "sapphire_paper.log"),
+        },
+        "momentum": {
+            "name": "Momentum Dual Confirmation" + (" [LIVE]" if real_mode else ""),
+            "script": str(MOMENTUM_DIR / "paper_trading.py"),
+            "args": [mode_flag, "--symbol", "nifty"],
+            "cwd": str(MOMENTUM_DIR),
+            "log": str(MOMENTUM_DIR / "paper_trades" / "momentum_paper.log"),
+        },
+        "ironcondor": {
+            "name": "Iron Condor (Sensex)" + (" [LIVE]" if real_mode else ""),
+            "script": str(IRONCONDOR_DIR / "paper_trading.py"),
+            "args": [mode_flag, "--symbol", "sensex"],
+            "cwd": str(IRONCONDOR_DIR),
+            "log": str(IRONCONDOR_DIR / "paper_trades" / "ic_paper.log"),
+        },
+    }
+
+# Default ALGOS (paper mode) for status/stop commands
+ALGOS = get_algos(real_mode=False)
 
 # ── Market Timing ────────────────────────────────────────────
 MARKET_OPEN = (9, 10)       # Start algos at 09:10
@@ -101,9 +109,10 @@ log = logging.getLogger("Launcher")
 
 
 # ── Process Management ───────────────────────────────────────
-def start_algo(algo_key: str) -> subprocess.Popen:
+def start_algo(algo_key: str, algos: dict = None) -> subprocess.Popen:
     """Start an algo as a background process."""
-    algo = ALGOS[algo_key]
+    _algos = algos or ALGOS
+    algo = _algos[algo_key]
     cmd = [PYTHON, algo["script"]] + algo["args"]
 
     log.info(f"  Starting {algo['name']}...")
@@ -200,12 +209,24 @@ def desktop_notify(title: str, message: str):
 
 
 # ── Main Runner ──────────────────────────────────────────────
-def run(algo_keys: list):
+def run(algo_keys: list, real_mode: bool = False):
     """Main loop: start algos, monitor health, stop after market close."""
+    algos = get_algos(real_mode)
+    mode_str = "LIVE TRADING" if real_mode else "PAPER TRADING"
+
+    # Double-check env gate for live mode
+    if real_mode:
+        live_env = os.environ.get("LIVE_TRADING", "false").lower()
+        if live_env != "true":
+            log.error("  LIVE_TRADING env var is not 'true'. Set LIVE_TRADING=true in .env")
+            log.error("  Aborting live mode for safety.")
+            return
+
     log.info("=" * 60)
-    log.info("  ALGO AUTO-LAUNCHER")
+    log.info(f"  ALGO AUTO-LAUNCHER — {mode_str}")
     log.info("=" * 60)
     log.info(f"  Date: {datetime.now().strftime('%Y-%m-%d %A')}")
+    log.info(f"  Mode: {mode_str}")
     log.info(f"  Algos: {', '.join(algo_keys)}")
     log.info(f"  Python: {PYTHON}")
 
@@ -230,7 +251,7 @@ def run(algo_keys: list):
     pids = {}
 
     for key in algo_keys:
-        proc = start_algo(key)
+        proc = start_algo(key, algos)
         processes[key] = proc
         pids[key] = proc.pid
 
@@ -272,10 +293,10 @@ def run(algo_keys: list):
                 if proc and proc.poll() is not None:
                     # Process died — restart it
                     exit_code = proc.returncode
-                    log.warning(f"  {ALGOS[key]['name']} crashed (exit={exit_code}). Restarting...")
-                    desktop_notify("Algo Crashed", f"{ALGOS[key]['name']} restarted")
+                    log.warning(f"  {algos[key]['name']} crashed (exit={exit_code}). Restarting...")
+                    desktop_notify("Algo Crashed", f"{algos[key]['name']} restarted")
 
-                    proc = start_algo(key)
+                    proc = start_algo(key, algos)
                     processes[key] = proc
                     pids[key] = proc.pid
                     save_pids(pids)
@@ -289,7 +310,7 @@ def run(algo_keys: list):
     for key in algo_keys:
         proc = processes.get(key)
         if proc and proc.poll() is None:
-            log.info(f"  Stopping {ALGOS[key]['name']}...")
+            log.info(f"  Stopping {algos[key]['name']}...")
             try:
                 proc.terminate()
                 proc.wait(timeout=10)
@@ -384,6 +405,8 @@ if __name__ == "__main__":
     parser.add_argument("--ironcondor", action="store_true", help="Run Iron Condor only")
     parser.add_argument("--status", action="store_true", help="Check running algos")
     parser.add_argument("--stop", action="store_true", help="Stop all algos")
+    parser.add_argument("--real", action="store_true",
+                        help="LIVE TRADING: Place real orders via Dhan API")
 
     args = parser.parse_args()
 
@@ -405,4 +428,4 @@ if __name__ == "__main__":
         if not keys:
             keys = ["ema", "sapphire", "momentum", "ironcondor"]  # Default: all four
 
-        run(keys)
+        run(keys, real_mode=args.real)

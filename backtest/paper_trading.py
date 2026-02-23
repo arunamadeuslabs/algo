@@ -48,6 +48,7 @@ import dhan_api
 from strategy import (
     Signal, TradeStatus, Trade, calculate_transaction_costs,
 )
+from dhan_orders import DhanOrderManager
 
 # ── Constants ────────────────────────────────────────────────
 PAPER_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "paper_trades")
@@ -124,13 +125,15 @@ class PaperTradingEngine:
 
     def __init__(self, interval: int = 5, capital: float = INITIAL_CAPITAL,
                  fast_ema: int = FAST_EMA_PERIOD, slow_ema: int = SLOW_EMA_PERIOD,
-                 resume: bool = False, symbol: str = "nifty"):
+                 resume: bool = False, symbol: str = "nifty", real_mode: bool = False):
         self.interval = interval            # Candle interval in minutes
         self.initial_capital = capital
         self.capital = capital
         self.fast_ema = fast_ema
         self.slow_ema = slow_ema
         self.symbol = symbol
+        self.real_mode = real_mode
+        self.order_mgr = DhanOrderManager(live=real_mode)
 
         self.current_trade: Optional[PaperTrade] = None
         self.closed_trades: List[PaperTrade] = []
@@ -259,6 +262,16 @@ class PaperTradingEngine:
         logger.info(f"     Qty       : {trade.quantity} ({NUM_LOTS} lot)")
         logger.info("=" * 55)
 
+        # Place real order if in live mode
+        self.order_mgr.place_order(
+            transaction_type="SELL",
+            symbol=self.symbol,
+            quantity=trade.quantity,
+            strike=trade.strike,
+            option_type=trade.option_type,
+            tag=f"ema_{trade.id}_entry",
+        )
+
         self._save_state()
 
     # ── Trade Management ─────────────────────────────────────
@@ -371,6 +384,16 @@ class PaperTradingEngine:
         logger.info(f"     Net P&L    : ₹{trade.net_pnl:+,.2f}")
         logger.info(f"     Capital    : ₹{self.capital:,.2f}")
         logger.info("=" * 55)
+
+        # Place exit order (buy back the option)
+        self.order_mgr.place_order(
+            transaction_type="BUY",
+            symbol=self.symbol,
+            quantity=trade.quantity,
+            strike=trade.strike,
+            option_type=trade.option_type,
+            tag=f"ema_{trade.id}_exit",
+        )
 
         self._append_trade_csv(trade)
         self._save_state()
@@ -817,6 +840,8 @@ def main():
     parser.add_argument("--symbol", type=str, default="nifty",
                         choices=["nifty", "banknifty", "finnifty", "midcapnifty", "sensex"],
                         help="Index to trade (default: nifty)")
+    parser.add_argument("--real", action="store_true",
+                        help="LIVE TRADING: Place real orders via Dhan API")
 
     args = parser.parse_args()
 
@@ -827,6 +852,7 @@ def main():
         slow_ema=args.slow_ema,
         resume=args.resume,
         symbol=args.symbol,
+        real_mode=args.real,
     )
 
     if args.simulate:
@@ -839,9 +865,10 @@ def main():
             df = generate_sample_nifty_data(days=args.days, timeframe=timeframe_map.get(args.interval, "5min"))
         df = compute_indicators(df, fast_period=args.fast_ema, slow_period=args.slow_ema)
         engine.run_once(df)
-    elif args.live:
-        # Live paper trading with Dhan API
-        print(f"\n🔴 LIVE PAPER TRADING MODE")
+    elif args.live or args.real:
+        # Live trading with Dhan API (paper or real depending on --real flag)
+        mode = "⚡ LIVE TRADING MODE — REAL ORDERS" if args.real else "🔴 LIVE PAPER TRADING MODE"
+        print(f"\n{mode}")
         print(f"   Data Source: Dhan API ({args.symbol})")
         print(f"   Interval: {args.interval}min")
         print(f"   Capital: ₹{args.capital:,.0f}")

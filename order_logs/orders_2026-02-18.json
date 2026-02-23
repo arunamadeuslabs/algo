@@ -1,0 +1,47 @@
+[
+  {
+    "timestamp": "2026-02-18T16:43:49.345437",
+    "action": "PLACE_ORDER",
+    "live": false,
+    "symbol": "nifty",
+    "strike": 24500,
+    "option_type": "CE",
+    "transaction": "SELL",
+    "quantity": 25,
+    "order_type": "MARKET",
+    "price": 0,
+    "tag": "test",
+    "status": "PAPER_MODE",
+    "order_id": "PAPER_1771413229_nifty"
+  },
+  {
+    "timestamp": "2026-02-18T16:43:49.346765",
+    "action": "PLACE_ORDER",
+    "live": false,
+    "symbol": "nifty",
+    "strike": null,
+    "option_type": null,
+    "transaction": "BUY",
+    "quantity": 25,
+    "order_type": "MARKET",
+    "price": 0,
+    "tag": "test_fut",
+    "status": "PAPER_MODE",
+    "order_id": "PAPER_1771413229_nifty"
+  },
+  {
+    "timestamp": "2026-02-18T16:46:11.328955",
+    "action": "PLACE_ORDER",
+    "live": false,
+    "symbol": "nifty",
+    "strike": 24500,
+    "option_type": "CE",
+    "transaction": "SELL",
+    "quantity": 25,
+    "order_type": "MARKET",
+    "price": 0,
+    "tag": "test_order",
+    "status": "PAPER_MODE",
+    "order_id": "PAPER_1771413371_nifty"
+  }
+]

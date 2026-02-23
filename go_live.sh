@@ -1,13 +1,14 @@
 #!/bin/bash
 # ============================================================
-#  go_live.sh — One-command GCP live paper trading setup
+#  go_live.sh — One-command GCP live trading setup
 # ============================================================
 #  Run this ONCE on your GCP VM to pull latest code, install
 #  dependencies, set up cron jobs, start the live dashboard,
 #  and enable auto-start on reboot.
 #
 #  Usage:
-#    bash go_live.sh              # Full setup
+#    bash go_live.sh              # Full setup (PAPER mode)
+#    bash go_live.sh --real       # Full setup (LIVE TRADING mode)
 #    bash go_live.sh --restart    # Just restart dashboard + servers
 #    bash go_live.sh --status     # Check what's running
 # ============================================================
@@ -31,11 +32,27 @@ ok()     { echo -e "  ${GREEN}✓${NC} $1"; }
 warn()   { echo -e "  ${YELLOW}⚠${NC} $1"; }
 fail()   { echo -e "  ${RED}✗${NC} $1"; }
 
+# ── Detect --real mode ────────────────────────────────────────
+REAL_MODE=false
+for arg in "$@"; do
+    if [ "$arg" = "--real" ]; then
+        REAL_MODE=true
+    fi
+done
+
+if [ "$REAL_MODE" = true ]; then
+    MODE_LABEL="LIVE TRADING"
+    LAUNCHER_FLAG="--real"
+else
+    MODE_LABEL="Paper Trading"
+    LAUNCHER_FLAG=""
+fi
+
 # ── Status check ─────────────────────────────────────────────
-if [ "$1" = "--status" ]; then
+if [ "$1" = "--status" ] || [ "$2" = "--status" ]; then
     echo ""
     echo "============================================"
-    echo "  Algo Paper Trading — Status"
+    echo "  Algo Trading — Status"
     echo "============================================"
     echo ""
 
@@ -93,24 +110,42 @@ fi
 # ── Main setup / restart ─────────────────────────────────────
 echo ""
 echo "============================================"
-echo "  Algo Paper Trading — Go Live on GCP"
+if [ "$REAL_MODE" = true ]; then
+    echo -e "  ${RED}⚡ LIVE TRADING MODE — REAL ORDERS ⚡${NC}"
+else
+    echo "  Algo Paper Trading — Go Live on GCP"
+fi
 echo "============================================"
 echo "  Date: $(date '+%Y-%m-%d %H:%M:%S %Z')"
+echo "  Mode: $MODE_LABEL"
 echo ""
+
+# ── Safety confirmation for live trading ─────────────────────
+if [ "$REAL_MODE" = true ] && [ "$1" != "--restart" ]; then
+    echo -e "  ${RED}WARNING: This will place REAL ORDERS with real money!${NC}"
+    echo "  Strategies will execute live trades on Dhan API."
+    echo ""
+    read -p "  Type CONFIRM to proceed (or Ctrl+C to abort): " CONFIRM_INPUT
+    if [ "$CONFIRM_INPUT" != "CONFIRM" ]; then
+        echo "  Aborted. Run without --real for paper trading."
+        exit 1
+    fi
+    echo ""
+fi
 
 cd "$ALGO_DIR" || { fail "Directory $ALGO_DIR not found. Run cloud_setup.sh first."; exit 1; }
 
 # ── 1. Pull latest code ──────────────────────────────────────
 if [ "$1" != "--restart" ]; then
-    header "1/7" "Pulling latest code..."
+    header "1/8" "Pulling latest code..."
     git pull origin master 2>/dev/null || git pull origin main 2>/dev/null || git pull
     ok "Code updated"
 else
-    header "1/7" "Skipping git pull (--restart mode)"
+    header "1/8" "Skipping git pull (--restart mode)"
 fi
 
 # ── 2. Python environment ────────────────────────────────────
-header "2/7" "Checking Python environment..."
+header "2/8" "Checking Python environment..."
 if [ ! -d ".venv" ]; then
     python3 -m venv .venv
     ok "Virtual environment created"
@@ -121,7 +156,7 @@ pip install -r requirements.txt -q 2>/dev/null
 ok "Dependencies up to date"
 
 # ── 3. Verify .env ───────────────────────────────────────────
-header "3/7" "Checking credentials..."
+header "3/8" "Checking credentials..."
 if [ ! -f ".env" ]; then
     cat > .env << 'EOF'
 # Dhan API Credentials
@@ -145,8 +180,28 @@ fi
 # Load env
 export $(grep -v '^\#' .env | xargs) 2>/dev/null
 
+# ── 3b. Set LIVE_TRADING flag in .env ─────────────────────────
+if [ "$REAL_MODE" = true ]; then
+    if grep -q "LIVE_TRADING" .env; then
+        sed -i 's/LIVE_TRADING=.*/LIVE_TRADING=true/' .env
+    else
+        echo "LIVE_TRADING=true" >> .env
+    fi
+    ok "LIVE_TRADING=true set in .env"
+else
+    if grep -q "LIVE_TRADING" .env; then
+        sed -i 's/LIVE_TRADING=.*/LIVE_TRADING=false/' .env
+    else
+        echo "LIVE_TRADING=false" >> .env
+    fi
+    ok "LIVE_TRADING=false (paper mode)"
+fi
+
+# Reload env
+export $(grep -v '^\#' .env | xargs) 2>/dev/null
+
 # ── 4. Ensure timezone is IST ────────────────────────────────
-header "4/7" "Checking timezone..."
+header "4/8" "Checking timezone..."
 CURRENT_TZ=$(timedatectl show -p Timezone --value 2>/dev/null || echo "unknown")
 if [ "$CURRENT_TZ" != "Asia/Kolkata" ]; then
     sudo timedatectl set-timezone Asia/Kolkata
@@ -156,12 +211,14 @@ else
 fi
 
 # ── 5. Create directories ────────────────────────────────────
-header "5/7" "Setting up directories..."
+header "5/8" "Setting up directories..."
 mkdir -p backtest/paper_trades backtest/results
 mkdir -p sapphire/paper_trades sapphire/results
 mkdir -p momentum/paper_trades momentum/results
 mkdir -p ironcondor/paper_trades ironcondor/results
-ok "All directories ready"
+mkdir -p supertrend/paper_trades supertrend/results
+mkdir -p order_logs
+ok "All directories ready (including order_logs/)"
 
 # ── 5b. Seed paper trade data if empty ─────────────────────
 # Run backtests to populate trade logs if no data exists yet
@@ -188,8 +245,29 @@ else
     ok "Trade data already exists, skipping backtest seed"
 fi
 
-# ── 6. Kill old processes & start fresh ──────────────────────
-header "6/7" "Starting services..."
+# ── 6. Verify Dhan API connectivity ──────────────────────────
+header "6/8" "Checking Dhan API connectivity..."
+API_RESP=$($PYTHON -c "
+import requests, os
+try:
+    resp = requests.get('https://api.dhan.co/v2/fundlimit',
+        headers={'access-token': os.environ.get('DHAN_JWT_TOKEN',''),
+                 'client-id': os.environ.get('DHAN_CLIENT_ID','')}, timeout=10)
+    print(f'STATUS:{resp.status_code}')
+except Exception as e:
+    print(f'ERROR:{e}')
+" 2>/dev/null)
+
+if echo "$API_RESP" | grep -q "STATUS:200"; then
+    ok "Dhan API responding (fund limits OK)"
+elif echo "$API_RESP" | grep -q "STATUS:401"; then
+    warn "Dhan API returned 401 — check JWT token in .env"
+else
+    warn "Dhan API check: $API_RESP"
+fi
+
+# ── 7. Kill old processes & start fresh ──────────────────────
+header "7/8" "Starting services..."
 
 # Kill existing dashboard/static servers
 pkill -f "dashboard_server.py" 2>/dev/null && echo "  Stopped old dashboard" || true
@@ -213,15 +291,15 @@ fi
 $PYTHON daily_report.py --no-email 2>/dev/null && ok "dashboard.html generated" || warn "dashboard.html generation failed"
 $PYTHON tradebook.py 2>/dev/null && ok "tradebook.html generated" || warn "tradebook.html generation failed"
 
-# ── 7. Install cron jobs ─────────────────────────────────────
-header "7/7" "Setting up cron jobs..."
+# ── 8. Install cron jobs ─────────────────────────────────────
+header "8/8" "Setting up cron jobs..."
 
 LOGFILE="$ALGO_DIR/launcher.log"
 REPORT_LOG="$ALGO_DIR/daily_report.log"
 DASHBOARD_LOG="$ALGO_DIR/dashboard.log"
 
 # Cron entries
-CRON_LAUNCHER="10 9 * * 1-5 cd $ALGO_DIR && export PYTHONIOENCODING=utf-8 && export \$(grep -v '^\#' $ALGO_DIR/.env | xargs) && $PYTHON $LAUNCHER >> $LOGFILE 2>&1"
+CRON_LAUNCHER="10 9 * * 1-5 cd $ALGO_DIR && export PYTHONIOENCODING=utf-8 && export \$(grep -v '^\#' $ALGO_DIR/.env | xargs) && $PYTHON $LAUNCHER $LAUNCHER_FLAG >> $LOGFILE 2>&1"
 CRON_REPORT="40 15 * * 1-5 cd $ALGO_DIR && export PYTHONIOENCODING=utf-8 && export \$(grep -v '^\#' $ALGO_DIR/.env | xargs) && $PYTHON $REPORT >> $REPORT_LOG 2>&1"
 CRON_REBOOT="@reboot sleep 30 && cd $ALGO_DIR && export \$(grep -v '^\#' $ALGO_DIR/.env | xargs) && $PYTHON $DASHBOARD --port 8050 --no-browser >> $DASHBOARD_LOG 2>&1 &"
 
@@ -237,7 +315,11 @@ PUBLIC_IP=$(curl -s ifconfig.me 2>/dev/null || echo "YOUR_VM_IP")
 
 echo ""
 echo "============================================"
-echo -e "  ${GREEN}LIVE PAPER TRADING — READY${NC}"
+if [ "$REAL_MODE" = true ]; then
+    echo -e "  ${RED}⚡ LIVE TRADING — REAL ORDERS ACTIVE ⚡${NC}"
+else
+    echo -e "  ${GREEN}PAPER TRADING — READY${NC}"
+fi
 echo "============================================"
 echo ""
 echo "  Strategies:"
